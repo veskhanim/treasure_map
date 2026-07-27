@@ -1378,22 +1378,55 @@ function renderMemberTags(members) {
 }
 
 function renderVideoCard(video, controlsHtml) {
-    const memberTagsHtml = renderMemberTags(video.members);
-    const state = getProgressState(video);
-    const label = getProgressLabel(state, video);
-    const catShort = categories.find(c => c.name === video.category)?.short_name || '';
+    // Универсальное получение ID видео (пробуем разные названия полей)
+    const videoId = video.id || video.video_id || video.youtube_id || '';
     
-    const origUrl = video.original_lang === 'kr' ? video.kr_url : video.en_url;
+    // Универсальное получение URL
+    const krUrl = video.kr_url || video.krUrl || '';
+    const ruUrl = video.ru_url || video.ruUrl || '';
+    const enUrl = video.en_url || video.enUrl || '';
+    const originalLang = video.original_lang || video.originalLang || 'kr';
+    
+    // Универсальное получение статуса просмотра
+    const watchedOriginal = video.watched_original === true || video.watched_original === 'true' || video.watchedOriginal === true;
+    const watchedRu = video.watched_ru === true || video.watched_ru === 'true' || video.watchedRu === true;
+    const watchedEn = video.watched_en === true || video.watched_en === 'true' || video.watchedEn === true;
+    
+    // Преобразуем members в массив, если это строка
+    let members = video.members || [];
+    if (typeof members === 'string') {
+        members = members.split(',').map(m => m.trim()).filter(m => m);
+    }
+    
+    const memberTagsHtml = renderMemberTags(members);
+    
+    // Определяем состояние прогресса
+    let state = 'none';
+    let label = '—';
+    
+    if (ruUrl && watchedRu) {
+        state = 'translated';
+        label = '✓';
+    } else if (enUrl && !ruUrl && watchedEn) {
+        state = 'translated';
+        label = '✓';
+    } else if ((krUrl || enUrl) && watchedOriginal) {
+        state = 'original';
+        label = originalLang.toUpperCase();
+    }
+    
+    const origUrl = originalLang === 'kr' ? krUrl : enUrl;
+    const catShort = categories.find(c => c.name === video.category)?.short_name || '';
     
     return `
         <div class="video-left">
             <div class="video-thumbnail">
-                <img src="https://img.youtube.com/vi/${video.id}/hqdefault.jpg" alt="">
-                <div class="video-duration">${video.duration}</div>
+                <img src="https://img.youtube.com/vi/${videoId}/hqdefault.jpg" alt="" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 140 78%22><rect fill=%22%23333%22 width=%22140%22 height=%2278%22/><text fill=%22%23999%22 font-size=%2212%22 x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22>No Preview</text></svg>'">
+                <div class="video-duration">${video.duration || '0:00'}</div>
                 ${catShort ? `<div class="category-badge">${catShort}</div>` : ''}
             </div>
             <div class="thumbnail-controls">
-                <div class="edit-btn" onclick="openEditModal('${video.id}')">
+                <div class="edit-btn" onclick="openEditModal('${videoId}')">
                     <svg class="icon"><use href="#i-edit"/></svg>
                 </div>
                 ${controlsHtml || ''}
@@ -1401,17 +1434,17 @@ function renderVideoCard(video, controlsHtml) {
         </div>
         <div class="video-info">
             <div>
-                <div class="video-title">${video.title}</div>
+                <div class="video-title">${video.title || 'Без названия'}</div>
                 <div class="video-meta">
                     ${memberTagsHtml}
                     <span class="meta-dot"></span>
-                    <span>${video.date.split('-').reverse().join('.')}</span>
+                    <span>${video.date ? video.date.split('-').reverse().join('.') : ''}</span>
                 </div>
             </div>
             <div class="video-actions">
-                ${origUrl ? `<a class="video-link kr" href="${origUrl}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>${video.original_lang.toUpperCase()}</a>` : ''}
-                ${video.ru_url ? `<a class="video-link ru" href="${video.ru_url}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>RU</a>` : '<span class="video-link disabled">RU</span>'}
-                <div class="watched-progress" onclick="toggleWatchedProgress('${video.id}')">
+                ${origUrl ? `<a class="video-link kr" href="${origUrl}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>${originalLang.toUpperCase()}</a>` : ''}
+                ${ruUrl ? `<a class="video-link ru" href="${ruUrl}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>RU</a>` : '<span class="video-link disabled">RU</span>'}
+                <div class="watched-progress" onclick="toggleWatchedProgress('${videoId}')">
                     <div class="progress-bar" data-state="${state}">
                         <div class="progress-fill"></div>
                         <span class="progress-label">${label}</span>
