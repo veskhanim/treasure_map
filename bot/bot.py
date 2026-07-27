@@ -79,7 +79,7 @@ def get_channel_videos(channel_url):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
-     if not check_access(update.effective_user.id):
+    if not check_access(update.effective_user.id):
         await update.message.reply_text(
             "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
         )
