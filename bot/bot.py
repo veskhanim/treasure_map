@@ -20,14 +20,38 @@ def apps_script_request(path, method='GET', body=None, params=None):
     if 'id' in params:
         url += f"&id={params['id']}"
     
-    if method == 'GET':
-        response = requests.get(url)
-    else:
-        headers = {'Content-Type': 'text/plain;charset=utf-8'}
-        payload = {**(body or {}), '_method': method}
-        response = requests.post(url, headers=headers, json=payload)
-    
-    return response.json()
+    try:
+        if method == 'GET':
+            response = requests.get(url, timeout=10)
+        else:
+            headers = {'Content-Type': 'text/plain;charset=utf-8'}
+            payload = {**(body or {}), '_method': method}
+            response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        print(f"📡 Apps Script Response [{method} {path}]: Status={response.status_code}")
+        print(f"📄 Response text (first 500 chars): {response.text[:500]}")
+        
+        # Проверяем, что ответ не пустой
+        if not response.text.strip():
+            print(f"❌ Пустой ответ от Apps Script для {path}")
+            return {'error': 'Пустой ответ от сервера'}
+        
+        # Проверяем, что ответ начинается с { или [ (JSON)
+        if not response.text.strip().startswith(('{', '[')):
+            print(f"❌ Apps Script вернул не JSON для {path}: {response.text[:100]}")
+            return {'error': 'Сервер вернул не JSON (возможно HTML ошибка)'}
+        
+        return response.json()
+        
+    except requests.exceptions.Timeout:
+        print(f" Таймаут при запросе к Apps Script: {path}")
+        return {'error': 'Таймаут запроса'}
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Ошибка сети при запросе к Apps Script: {e}")
+        return {'error': f'Ошибка сети: {str(e)}'}
+    except Exception as e:
+        print(f"❌ Неизвестная ошибка при запросе к Apps Script: {e}")
+        return {'error': f'Неизвестная ошибка: {str(e)}'}
 
 # ===== YOUTUBE API =====
 def get_channel_videos(channel_url):
