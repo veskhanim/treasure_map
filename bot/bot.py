@@ -467,49 +467,74 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обработка ссылок на YouTube"""
     text = update.message.text
     
-    # Извлекаем video ID
+    # Извлекаем video ID из разных форматов ссылок
     patterns = [
-        r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
-        r'^([0-9A-Za-z_-]{11})$'
+        r'(?:v=|\/)([0-9A-Za-z_-]{11})',  # youtube.com/watch?v=ID или youtu.be/ID
+        r'^([0-9A-Za-z_-]{11})$',           # просто ID
+        r'shorts\/([0-9A-Za-z_-]{11})',    # youtube.com/shorts/ID
     ]
     
     video_id = None
     for pattern in patterns:
-        match = re.match(pattern, text)
+        match = re.search(pattern, text)
         if match:
             video_id = match.group(1)
             break
     
     if not video_id:
-        return
+        return  # Не ссылка на YouTube, игнорируем
     
-    # Проверяем существование
+    # Проверяем, есть ли уже такое видео
     videos = apps_script_request('videos', 'GET')
     pending = apps_script_request('pending-videos', 'GET')
     
-    existing_ids = set([v['id'] for v in videos] + [p['id'] for p in pending])
+    # Безопасно получаем списки ID
+    existing_video_ids = set()
+    if isinstance(videos, list):
+        existing_video_ids.update([str(v.get('id', '')) for v in videos])
+    if isinstance(pending, list):
+        existing_video_ids.update([str(p.get('id', '')) for p in pending])
     
-    if video_id in existing_ids:
-        await update.message.reply_text('️ Это видео уже есть в таблице')
+    if video_id in existing_video_ids:
+        await update.message.reply_text('⚠️ Это видео уже есть в таблице')
         return
     
-    # Получаем информацию о видео
+    # Получаем информацию о видео через YouTube oEmbed API
     try:
-        url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
-        response = requests.get(url)
+        oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
+        response = requests.get(oembed_url, timeout=10)
+        
+        if response.status_code != 200:
+            await update.message.reply_text('❌ Не удалось получить информацию о видео. Проверьте ссылку.')
+            return
+        
         data = response.json()
         
-        apps_script_request('pending-videos', 'POST', {
+        # Добавляем в pending через Apps Script
+        result = apps_script_request('pending-videos', 'POST', {
             'id': video_id,
-            'title': data['title'],
+            'title': data.get('title', 'Без названия'),
             'channel_id': 'manual',
-            'channel_name': 'Добавлено вручную',
+            'channel_name': data.get('author_name', 'Неизвестно'),
+            'published_at': '',
+            'duration': '',
+            'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
             'video_url': f'https://youtube.com/watch?v={video_id}'
         })
         
-        await update.message.reply_text(
-            f"✅ Видео добавлено в pending!\n\n{data['title']}"
-        )
+        # Проверяем результат
+        if isinstance(result, dict) and result.get('success'):
+            await update.message.reply_text(
+                f"✅ Видео добавлено в pending!\n\n"
+                f"📹 {data.get('title', 'Без названия')}\n"
+                f" {data.get('author_name', 'Неизвестно')}"
+            )
+        else:
+            error_msg = result.get('error', 'Неизвестная ошибка') if isinstance(result, dict) else str(result)
+            await update.message.reply_text(f'❌ Ошибка при добавлении: {error_msg}')
+            
+    except requests.exceptions.Timeout:
+        await update.message.reply_text('❌ Таймаут при получении информации о видео')
     except Exception as e:
         await update.message.reply_text(f'❌ Ошибка: {str(e)}')
 
