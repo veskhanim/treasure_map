@@ -500,7 +500,6 @@
         }
         .playlist-preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
-        /* Компактные карточные переключатели в одну строку */
         .team-filters {
             padding: 10px 12px;
             background: rgba(0,0,0,0.2);
@@ -1174,7 +1173,7 @@
                         <div class="switch-card-label">Все</div>
                     </div>
                     <div class="switch-card" data-type="original" onclick="setTeamFilter('type', 'original', this)">
-                        <div class="switch-card-icon">🌍</div>
+                        <div class="switch-card-icon"></div>
                         <div class="switch-card-label">Ориг</div>
                     </div>
                     <div class="switch-card" data-type="translation" onclick="setTeamFilter('type', 'translation', this)">
@@ -1222,7 +1221,25 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 tg.ready();
 
+// ===== API URL - ЗАМЕНИТЕ НА ВАШ URL APPS SCRIPT =====
 const API_URL = 'https://script.google.com/macros/s/AKfycbwfhHysWOjOISP0-h5211XBc9ED0Crib9XDKy_2bWjGrdaA0rh8X0Q0mPJdnlClyNPg/exec';
+
+// ===== API REQUEST HELPER =====
+async function apiRequest(path, method = 'GET', body = null, params = {}) {
+    const url = new URL(API_URL);
+    url.searchParams.append('path', path);
+    if (params.id) url.searchParams.append('id', params.id);
+    
+    const options = { method: 'POST' };
+    
+    if (body || method !== 'GET') {
+        options.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+        options.body = JSON.stringify({ ...(body || {}), _method: method });
+    }
+    
+    const response = await fetch(url.toString(), options);
+    return await response.json();
+}
 
 let currentTab = 'map';
 let currentFilter = 'all';
@@ -1241,19 +1258,19 @@ let pendingVideos = [];
 
 async function loadData() {
     try {
-        const [videosRes, channelsRes, playlistsRes, categoriesRes, pendingRes] = await Promise.all([
-            fetch(`${API_URL}/api/videos`),
-            fetch(`${API_URL}/api/channels`),
-            fetch(`${API_URL}/api/playlists`),
-            fetch(`${API_URL}/api/categories`),
-            fetch(`${API_URL}/api/pending-videos`)
+        const [videosData, channelsData, playlistsData, categoriesData, pendingData] = await Promise.all([
+            apiRequest('videos', 'GET'),
+            apiRequest('channels', 'GET'),
+            apiRequest('playlists', 'GET'),
+            apiRequest('categories', 'GET'),
+            apiRequest('pending-videos', 'GET')
         ]);
         
-        videos = await videosRes.json();
-        channels = await channelsRes.json();
-        playlists = await playlistsRes.json();
-        categories = await categoriesRes.json();
-        pendingVideos = await pendingRes.json();
+        videos = videosData || [];
+        channels = channelsData || [];
+        playlists = playlistsData || [];
+        categories = categoriesData || [];
+        pendingVideos = pendingData || [];
         
         renderVideos(getFilteredVideos());
         renderPlaylists();
@@ -1278,11 +1295,11 @@ function getFilteredVideos() {
         else if (currentFilter === 'Awards') show = video.category === 'Awards';
         else if (currentFilter === 'Interview') show = video.category === 'Interview';
         else if (currentFilter === 'unwatched') {
-            if (video.ruUrl) show = !video.watchedRu;
-            else if (video.enUrl && video.originalLang === 'kr') show = !video.watchedEn;
-            else show = !video.watchedOriginal;
+            if (video.ru_url) show = !video.watched_ru;
+            else if (video.en_url && video.original_lang === 'kr') show = !video.watched_en;
+            else show = !video.watched_original;
         }
-        else if (currentFilter === 'translated') show = !!(video.ruUrl || (video.enUrl && video.originalLang === 'kr'));
+        else if (currentFilter === 'translated') show = !!(video.ru_url || (video.en_url && video.original_lang === 'kr'));
         
         if (currentMember !== 'all') show = show && video.members.includes(currentMember);
         if (show && textQuery) show = video.title.toLowerCase().includes(textQuery);
@@ -1297,16 +1314,16 @@ function getFilteredVideos() {
 }
 
 function getProgressState(video) {
-    if (video.ruUrl && video.watchedRu) return 'translated';
-    if (video.enUrl && !video.ruUrl && video.watchedEn) return 'translated';
-    const origUrl = video.originalLang === 'kr' ? video.krUrl : video.enUrl;
-    if (origUrl && video.watchedOriginal) return 'original';
+    if (video.ru_url && video.watched_ru) return 'translated';
+    if (video.en_url && !video.ru_url && video.watched_en) return 'translated';
+    const origUrl = video.original_lang === 'kr' ? video.kr_url : video.en_url;
+    if (origUrl && video.watched_original) return 'original';
     return 'none';
 }
 
 function getProgressLabel(state, video) {
     if (state === 'translated') return '✓';
-    if (state === 'original') return video.originalLang.toUpperCase();
+    if (state === 'original') return video.original_lang.toUpperCase();
     return '—';
 }
 
@@ -1323,7 +1340,7 @@ function renderVideoCard(video, controlsHtml) {
     const label = getProgressLabel(state, video);
     const catShort = categories.find(c => c.name === video.category)?.short_name || '';
     
-    const origUrl = video.originalLang === 'kr' ? video.krUrl : video.enUrl;
+    const origUrl = video.original_lang === 'kr' ? video.kr_url : video.en_url;
     
     return `
         <div class="video-left">
@@ -1349,8 +1366,8 @@ function renderVideoCard(video, controlsHtml) {
                 </div>
             </div>
             <div class="video-actions">
-                ${origUrl ? `<a class="video-link kr" href="${origUrl}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>${video.originalLang.toUpperCase()}</a>` : ''}
-                ${video.ruUrl ? `<a class="video-link ru" href="${video.ruUrl}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>RU</a>` : '<span class="video-link disabled">RU</span>'}
+                ${origUrl ? `<a class="video-link kr" href="${origUrl}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>${video.original_lang.toUpperCase()}</a>` : ''}
+                ${video.ru_url ? `<a class="video-link ru" href="${video.ru_url}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>RU</a>` : '<span class="video-link disabled">RU</span>'}
                 <div class="watched-progress" onclick="toggleWatchedProgress('${video.id}')">
                     <div class="progress-bar" data-state="${state}">
                         <div class="progress-fill"></div>
@@ -1382,7 +1399,7 @@ function renderPlaylists() {
     if (!container) return;
     
     container.innerHTML = playlists.map(playlist => {
-        const previewVideos = playlist.videoIds.slice(0, 3).map(vid => {
+        const previewVideos = playlist.video_ids.slice(0, 3).map(vid => {
             const video = videos.find(v => v.id === vid);
             return video ? `<div class="playlist-preview-thumb"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" alt=""></div>` : '';
         }).join('');
@@ -1392,7 +1409,7 @@ function renderPlaylists() {
                 <div class="playlist-card-header">
                     <div>
                         <div class="playlist-name">${playlist.name}</div>
-                        <div class="playlist-count">${playlist.videoIds.length} видео</div>
+                        <div class="playlist-count">${playlist.video_ids.length} видео</div>
                     </div>
                     <button class="playlist-delete-btn" onclick="deletePlaylist('${playlist.id}')">
                         <svg class="icon"><use href="#i-trash"/></svg>
@@ -1499,25 +1516,43 @@ function setTeamFilter(filterType, value, btn) {
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
+async function toggleWatchedProgress(videoId) {
+    const video = videos.find(v => v.id === videoId);
+    if (!video) return;
+    
+    if (!video.watched_original && !video.watched_en && !video.watched_ru) {
+        video.watched_original = true;
+    } else if (video.watched_original && !video.watched_en && !video.watched_ru) {
+        if (video.en_url) video.watched_en = true;
+        else if (video.ru_url) video.watched_ru = true;
+        else video.watched_original = false;
+    } else if (video.watched_original && video.watched_en && !video.watched_ru) {
+        if (video.ru_url) video.watched_ru = true;
+        else { video.watched_original = false; video.watched_en = false; }
+    } else if (video.watched_original && video.watched_ru) {
+        video.watched_original = false;
+        video.watched_en = false;
+        video.watched_ru = false;
+    } else {
+        video.watched_original = false;
+        video.watched_en = false;
+        video.watched_ru = false;
+    }
+    
+    await apiRequest('videos', 'PUT', video, { id: videoId });
+    renderVideos(getFilteredVideos());
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
 async function toggleChannelTracked(channelId) {
     const channel = channels.find(c => c.id === channelId);
     if (!channel) return;
     
-    const newTracked = !channel.tracked;
+    channel.tracked = !channel.tracked;
     
-    try {
-        await fetch(`${API_URL}/api/channels/${channelId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: channel.name, url: channel.url, type: channel.type, tracked: newTracked })
-        });
-        
-        channel.tracked = newTracked;
-        renderTeamChannels();
-        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-    } catch (error) {
-        console.error('Error toggling tracked:', error);
-    }
+    await apiRequest('channels', 'PUT', channel, { id: channelId });
+    renderTeamChannels();
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
 function openAddPlaylistModal() {
@@ -1533,19 +1568,11 @@ async function createPlaylist() {
     const name = document.getElementById('newPlaylistName').value.trim();
     if (!name) return;
     
-    try {
-        await fetch(`${API_URL}/api/playlists`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
-        
-        closeAddPlaylistModal();
-        await loadData();
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-    } catch (error) {
-        console.error('Error creating playlist:', error);
-    }
+    await apiRequest('playlists', 'POST', { name });
+    
+    closeAddPlaylistModal();
+    await loadData();
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 }
 
 async function deletePlaylist(playlistId) {
@@ -1558,13 +1585,9 @@ async function deletePlaylist(playlistId) {
     
     if (!confirmed) return;
     
-    try {
-        await fetch(`${API_URL}/api/playlists/${playlistId}`, { method: 'DELETE' });
-        await loadData();
-        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-    } catch (error) {
-        console.error('Error deleting playlist:', error);
-    }
+    await apiRequest('playlists', 'DELETE', null, { id: playlistId });
+    await loadData();
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
 function openApproveModal(videoId) {
@@ -1588,29 +1611,21 @@ async function approvePendingVideo() {
     const videoId = document.getElementById('approveVideoId').value;
     const category = document.getElementById('approveCategory').value;
     
-    try {
-        await fetch(`${API_URL}/api/pending-videos/${videoId}/approve`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, members: [] })
-        });
-        
-        closeApproveModal();
-        await loadData();
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-    } catch (error) {
-        console.error('Error approving video:', error);
-    }
+    await apiRequest('pending-approve', 'POST', {
+        id: videoId,
+        category: category,
+        members: []
+    });
+    
+    closeApproveModal();
+    await loadData();
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 }
 
 async function skipPendingVideo(videoId) {
-    try {
-        await fetch(`${API_URL}/api/pending-videos/${videoId}`, { method: 'DELETE' });
-        await loadData();
-        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-    } catch (error) {
-        console.error('Error skipping video:', error);
-    }
+    await apiRequest('pending-videos', 'DELETE', null, { id: videoId });
+    await loadData();
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
 function updateCategoryDropdown() {
@@ -1674,33 +1689,6 @@ function switchTab(tabName, el) {
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
-function toggleWatchedProgress(videoId) {
-    const video = videos.find(v => v.id === videoId);
-    if (!video) return;
-    
-    if (!video.watchedOriginal && !video.watchedEn && !video.watchedRu) {
-        video.watchedOriginal = true;
-    } else if (video.watchedOriginal && !video.watchedEn && !video.watchedRu) {
-        if (video.enUrl) video.watchedEn = true;
-        else if (video.ruUrl) video.watchedRu = true;
-        else video.watchedOriginal = false;
-    } else if (video.watchedOriginal && video.watchedEn && !video.watchedRu) {
-        if (video.ruUrl) video.watchedRu = true;
-        else { video.watchedOriginal = false; video.watchedEn = false; }
-    } else if (video.watchedOriginal && video.watchedRu) {
-        video.watchedOriginal = false;
-        video.watchedEn = false;
-        video.watchedRu = false;
-    } else {
-        video.watchedOriginal = false;
-        video.watchedEn = false;
-        video.watchedRu = false;
-    }
-    
-    renderVideos(getFilteredVideos());
-    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-}
-
 function toggleSort() {
     videos.sort((a, b) => a.date.localeCompare(b.date));
     renderVideos(getFilteredVideos());
@@ -1722,12 +1710,12 @@ function openEditModal(videoId) {
     if (!video) return;
     
     editingVideoId = videoId;
-    editingLang = video.originalLang || 'kr';
+    editingLang = video.original_lang || 'kr';
     
     document.getElementById('editTitle').value = video.title;
-    const origUrl = video.originalLang === 'kr' ? video.krUrl : video.enUrl;
+    const origUrl = video.original_lang === 'kr' ? video.kr_url : video.en_url;
     document.getElementById('editOriginalUrl').value = origUrl || '';
-    document.getElementById('editRuUrl').value = video.ruUrl || '';
+    document.getElementById('editRuUrl').value = video.ru_url || '';
     
     selectLang(editingLang);
     
@@ -1761,36 +1749,28 @@ async function saveEdit() {
     if (!video) return;
     
     video.title = document.getElementById('editTitle').value;
-    video.originalLang = editingLang;
+    video.original_lang = editingLang;
     
     const originalUrl = document.getElementById('editOriginalUrl').value;
     const ruUrl = document.getElementById('editRuUrl').value;
     
     if (editingLang === 'kr') {
-        video.krUrl = originalUrl;
-        video.enUrl = '';
+        video.kr_url = originalUrl;
+        video.en_url = '';
     } else {
-        video.krUrl = '';
-        video.enUrl = originalUrl;
+        video.kr_url = '';
+        video.en_url = originalUrl;
     }
-    video.ruUrl = ruUrl;
+    video.ru_url = ruUrl;
     
     const activeTags = document.querySelectorAll('.modal-member-tag.active');
     video.members = Array.from(activeTags).map(tag => tag.dataset.memberId);
     
-    try {
-        await fetch(`${API_URL}/api/videos/${editingVideoId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(video)
-        });
-        
-        closeEditModal();
-        await loadData();
-        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-    } catch (error) {
-        console.error('Error saving video:', error);
-    }
+    await apiRequest('videos', 'PUT', video, { id: editingVideoId });
+    
+    closeEditModal();
+    await loadData();
+    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 }
 
 document.getElementById('calendarBtn').addEventListener('click', function(e) {
