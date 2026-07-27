@@ -79,6 +79,11 @@ def get_channel_videos(channel_url):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
+     if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     keyboard = [
         [InlineKeyboardButton(
             "🗺️ Открыть приложение", 
@@ -95,6 +100,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     await update.message.reply_text(
         ' Справка:\n\n'
         ' Отправьте ссылку на YouTube — видео добавится в pending\n'
@@ -114,6 +124,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /app"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     keyboard = [
         [InlineKeyboardButton(
             "🗺️ Открыть", 
@@ -128,6 +143,11 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def channels_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /channels"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     channels = apps_script_request('channels', 'GET')
     
     if not channels:
@@ -156,6 +176,11 @@ async def channels_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /addchannel"""
+     if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     if len(context.args) < 2:
         await update.message.reply_text(
             'Использование: /addchannel <название> <url> [original|translation]\n\n'
@@ -188,6 +213,11 @@ async def add_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /track"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     if not context.args:
         await update.message.reply_text('Использование: /track <channel_id>')
         return
@@ -208,6 +238,11 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def untrack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /untrack"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     if not context.args:
         await update.message.reply_text('Использование: /untrack <channel_id>')
         return
@@ -228,6 +263,11 @@ async def untrack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def set_type_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /settype"""
+     if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     if len(context.args) < 2:
         await update.message.reply_text('Использование: /settype <channel_id> <original|translation>')
         return
@@ -254,6 +294,11 @@ async def set_type_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def refresh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /refresh - обновление видео с отслеживаемых каналов"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     await update.message.reply_text('🔄 Обновляю каналы...')
     
     # Получаем отслеживаемые каналы
@@ -297,6 +342,11 @@ async def refresh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /pending"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     pending = apps_script_request('pending-videos', 'GET')
     
     if not pending:
@@ -316,6 +366,11 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /categories"""
+     if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     categories = apps_script_request('categories', 'GET')
     
     if not categories:
@@ -330,6 +385,11 @@ async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def add_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /addcat"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     if len(context.args) < 2:
         await update.message.reply_text(
             'Использование: /addcat <название> <краткое>\n\n'
@@ -349,6 +409,11 @@ async def add_category_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /stats"""
+ if not check_access(update.effective_user.id):
+        await update.message.reply_text(
+            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
+        )
+        return
     videos = apps_script_request('videos', 'GET')
     pending = apps_script_request('pending-videos', 'GET')
     channels = apps_script_request('channels', 'GET')
@@ -419,6 +484,24 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         await update.message.reply_text(f'❌ Ошибка: {str(e)}')
 
+# ===== ПРОВЕРКА ДОСТУПА =====
+def check_access(telegram_id: int) -> bool:
+    """Проверяет, есть ли у пользователя доступ"""
+    try:
+        url = f"{APPS_SCRIPT_URL}?path=users"
+        response = requests.get(url)
+        users = response.json()
+        
+        if isinstance(users, list):
+            for user in users:
+                # Сравниваем как строки, чтобы избежать проблем с типами
+                if str(user.get('telegram_id')) == str(telegram_id):
+                    access_val = str(user.get('access')).lower()
+                    return access_val in ['true', '1', 'yes']
+        return False
+    except Exception as e:
+        print(f"Ошибка проверки доступа: {e}")
+        return False
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
