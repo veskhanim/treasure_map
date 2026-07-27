@@ -489,19 +489,29 @@ def check_access(telegram_id: int) -> bool:
     """Проверяет, есть ли у пользователя доступ"""
     try:
         url = f"{APPS_SCRIPT_URL}?path=users"
-        response = requests.get(url)
+        print(f"🔍 Запрос к Apps Script: {url}")
+        
+        response = requests.get(url, timeout=10)
+        print(f"📡 Статус ответа: {response.status_code}")
+        print(f"📄 Текст ответа: {response.text[:300]}") # Покажет первые 300 символов ответа
+        
+        # Пробуем распарсить JSON
         users = response.json()
         
         if isinstance(users, list):
             for user in users:
-                # Сравниваем как строки, чтобы избежать проблем с типами
                 if str(user.get('telegram_id')) == str(telegram_id):
                     access_val = str(user.get('access')).lower()
                     return access_val in ['true', '1', 'yes']
         return False
-    except Exception as e:
-        print(f"Ошибка проверки доступа: {e}")
+        
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Ошибка сети при проверке доступа: {e}")
         return False
+    except Exception as e:
+        print(f"❌ Ошибка парсинга JSON при проверке доступа: {e}")
+        return False
+        
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
