@@ -176,11 +176,6 @@ async def channels_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def add_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /addchannel"""
-    if not check_access(update.effective_user.id):
-        await update.message.reply_text(
-            "❌ У вас нет доступа к этому боту.\nОбратитесь к администратору."
-        )
-        return
     if len(context.args) < 2:
         await update.message.reply_text(
             'Использование: /addchannel <название> <url> [original|translation]\n\n'
@@ -188,12 +183,22 @@ async def add_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
     
-    name = context.args[0]
-    url = context.args[1]
-    channel_type = context.args[2] if len(context.args) > 2 else 'original'
+    # Копируем список аргументов, чтобы не ломать оригинал
+    args = context.args.copy()
     
-    if channel_type not in ('original', 'translation'):
-        await update.message.reply_text('Тип должен быть: original или translation')
+    # 1. Определяем тип канала (последний аргумент, если он original или translation)
+    channel_type = 'original'
+    if args[-1] in ('original', 'translation'):
+        channel_type = args.pop()
+    
+    # 2. Ссылка на канал (теперь последний аргумент)
+    url = args.pop()
+    
+    # 3. Название канала (всё, что осталось, склеиваем пробелами)
+    name = ' '.join(args)
+    
+    if not name or not url:
+        await update.message.reply_text('Неверный формат. Проверьте название и ссылку.')
         return
     
     result = apps_script_request('channels', 'POST', {
