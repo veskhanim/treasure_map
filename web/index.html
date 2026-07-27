@@ -1281,18 +1281,29 @@ async function loadData() {
             apiRequest('pending-videos', 'GET')
         ]);
         
-        // Преобразуем строки в массивы для members и video_ids
-        videos = (videosData || []).map(video => ({
-            ...video,
-            members: typeof video.members === 'string' ? video.members.split(',').filter(m => m) : (video.members || [])
-        }));
+        // Преобразуем строки в массивы для members
+        videos = (videosData || []).map(video => {
+            let members = video.members;
+            if (typeof members === 'string') {
+                members = members.split(',').filter(m => m.trim());
+            } else if (!Array.isArray(members)) {
+                members = [];
+            }
+            return { ...video, members };
+        });
         
         channels = channelsData || [];
         
-        playlists = (playlistsData || []).map(playlist => ({
-            ...playlist,
-            video_ids: typeof playlist.video_ids === 'string' ? playlist.video_ids.split(',').filter(v => v) : (playlist.video_ids || [])
-        }));
+        // Преобразуем строки в массивы для video_ids
+        playlists = (playlistsData || []).map(playlist => {
+            let videoIds = playlist.video_ids;
+            if (typeof videoIds === 'string') {
+                videoIds = videoIds.split(',').filter(v => v.trim());
+            } else if (!Array.isArray(videoIds)) {
+                videoIds = [];
+            }
+            return { ...playlist, video_ids: videoIds };
+        });
         
         categories = categoriesData || [];
         pendingVideos = pendingData || [];
