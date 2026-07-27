@@ -1273,6 +1273,8 @@ let pendingVideos = [];
 
 async function loadData() {
     try {
+        console.log("🔄 Начинаем загрузку данных...");
+        
         const [videosData, channelsData, playlistsData, categoriesData, pendingData] = await Promise.all([
             apiRequest('videos', 'GET'),
             apiRequest('channels', 'GET'),
@@ -1281,11 +1283,13 @@ async function loadData() {
             apiRequest('pending-videos', 'GET')
         ]);
         
-        // Преобразуем строки в массивы для members
+        console.log("📦 Сырые данные получены:", { videosData, channelsData, playlistsData });
+
+        // 1. Безопасная обработка видео (превращаем строку members в массив)
         videos = (videosData || []).map(video => {
             let members = video.members;
             if (typeof members === 'string') {
-                members = members.split(',').filter(m => m.trim());
+                members = members.split(',').map(m => m.trim()).filter(m => m);
             } else if (!Array.isArray(members)) {
                 members = [];
             }
@@ -1294,11 +1298,11 @@ async function loadData() {
         
         channels = channelsData || [];
         
-        // Преобразуем строки в массивы для video_ids
+        // 2. Безопасная обработка плейлистов (превращаем строку video_ids в массив)
         playlists = (playlistsData || []).map(playlist => {
             let videoIds = playlist.video_ids;
             if (typeof videoIds === 'string') {
-                videoIds = videoIds.split(',').filter(v => v.trim());
+                videoIds = videoIds.split(',').map(v => v.trim()).filter(v => v);
             } else if (!Array.isArray(videoIds)) {
                 videoIds = [];
             }
@@ -1308,13 +1312,16 @@ async function loadData() {
         categories = categoriesData || [];
         pendingVideos = pendingData || [];
         
+        console.log("✅ Данные успешно обработаны. Рендерим...");
+        
         renderVideos(getFilteredVideos());
         renderPlaylists();
         renderTeamChannels();
         renderPendingVideos();
         updateCategoryDropdown();
+        
     } catch (error) {
-        console.error('Error loading data:', error);
+        console.error("❌ Критическая ошибка загрузки данных:", error);
     }
 }
 
