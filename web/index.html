@@ -1228,16 +1228,31 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwDZCvcXT2tQqFuhblCight
 async function apiRequest(path, method = 'GET', body = null, params = {}) {
     const url = new URL(API_URL);
     url.searchParams.append('path', path);
-    if (params.id) url.searchParams.append('id', params.id);
-    
-    const options = { method: 'POST' };
-    
-    if (body || method !== 'GET') {
-        options.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-        options.body = JSON.stringify({ ...(body || {}), _method: method });
+    if (params && params.id) {
+        url.searchParams.append('id', params.id);
     }
     
+    // Для GET запросов используем обычный GET без заголовков (избегаем CORS preflight)
+    if (method === 'GET') {
+        const response = await fetch(url.toString());
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        return await response.json();
+    }
+    
+    // Для POST/PUT/DELETE используем POST с text/plain (избегаем CORS preflight)
+    const options = {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({ 
+            ...(body || {}), 
+            _method: method 
+        })
+    };
+    
     const response = await fetch(url.toString(), options);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     return await response.json();
 }
 
