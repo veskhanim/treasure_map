@@ -8,6 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 WEBAPP_URL = os.getenv('WEBAPP_URL')
 APPS_SCRIPT_URL = os.getenv('APPS_SCRIPT_URL')
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 
 # ===== API HELPER =====
 def apps_script_request(path, method='GET', body=None, params=None):
@@ -27,6 +28,52 @@ def apps_script_request(path, method='GET', body=None, params=None):
         response = requests.post(url, headers=headers, json=payload)
     
     return response.json()
+
+# ===== YOUTUBE API =====
+def get_channel_videos(channel_url):
+    """Получить видео с канала YouTube"""
+    if not YOUTUBE_API_KEY:
+        return []
+    
+    try:
+        # Получаем upload playlist ID канала
+        channel_response = requests.get(
+            'https://www.googleapis.com/youtube/v3/channels',
+            params={
+                'part': 'contentDetails',
+                'id': channel_url,
+                'key': YOUTUBE_API_KEY
+            }
+        ).json()
+        
+        if not channel_response.get('items'):
+            return []
+        
+        upload_playlist_id = channel_response['items'][0]['contentDetails']['relatedPlaylists']['uploads']
+        
+        # Получаем последние видео
+        playlist_response = requests.get(
+            'https://www.googleapis.com/youtube/v3/playlistItems',
+            params={
+                'part': 'snippet',
+                'playlistId': upload_playlist_id,
+                'maxResults': 10,
+                'key': YOUTUBE_API_KEY
+            }
+        ).json()
+        
+        videos = []
+        for item in playlist_response.get('items', []):
+            videos.append({
+                'id': item['snippet']['resourceId']['videoId'],
+                'title': item['snippet']['title'],
+                'published_at': item['snippet']['publishedAt']
+            })
+        
+        return videos
+    except Exception as e:
+        print(f"Error fetching channel videos: {e}")
+        return []
 
 # ===== КОМАНДЫ =====
 
@@ -49,14 +96,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
     await update.message.reply_text(
-        '📖 Справка:\n\n'
-        '📹 Отправьте ссылку на YouTube — видео добавится в pending\n'
+        ' Справка:\n\n'
+        ' Отправьте ссылку на YouTube — видео добавится в pending\n'
         '/app — открыть мини-приложение\n'
         '/channels — список каналов\n'
         '/addchannel <name> <url> [original|translation] — добавить канал\n'
         '/track <channel_id> — включить отслеживание\n'
         '/untrack <channel_id> — выключить отслеживание\n'
         '/settype <channel_id> <original|translation> — тип канала\n'
+        '/refresh — обновить видео с отслеживаемых каналов\n'
         '/pending — ожидающие видео\n'
         '/categories — список категорий\n'
         '/addcat <name> <short> — добавить категорию\n'
@@ -68,7 +116,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /app"""
     keyboard = [
         [InlineKeyboardButton(
-            "️ Открыть", 
+            "🗺️ Открыть", 
             web_app=WebAppInfo(url=WEBAPP_URL)
         )]
     ]
@@ -83,7 +131,7 @@ async def channels_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channels = apps_script_request('channels', 'GET')
     
     if not channels:
-        await update.message.reply_text('📺 Каналы не найдены')
+        await update.message.reply_text(' Каналы не найдены')
         return
     
     msg = '📺 Каналы:\n\n'
@@ -146,7 +194,6 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     channel_id = context.args[0]
     
-    # Получаем канал
     channels = apps_script_request('channels', 'GET')
     channel = next((c for c in channels if c['id'] == channel_id), None)
     
@@ -154,7 +201,6 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('❌ Канал не найден')
         return
     
-    # Обновляем
     channel['tracked'] = True
     apps_script_request('channels', 'PUT', channel, {'id': channel_id})
     
@@ -206,6 +252,49 @@ async def set_type_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     type_name = 'оригинальный' if channel_type == 'original' else 'переводческий'
     await update.message.reply_text(f"✅ Тип канала {channel_id} изменен на: {type_name}")
 
+async def refresh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /refresh - обновление видео с отслеживаемых каналов"""
+    await update.message.reply_text('🔄 Обновляю каналы...')
+    
+    # Получаем отслеживаемые каналы
+    channels = apps_script_request('channels', 'GET')
+    tracked_channels = [c for c in channels if c.get('tracked')]
+    
+    if not tracked_channels:
+        await update.message.reply_text('📺 Нет отслеживаемых каналов')
+        return
+    
+    # Получаем существующие видео
+    videos = apps_script_request('videos', 'GET')
+    pending = apps_script_request('pending-videos', 'GET')
+    
+    existing_ids = set([v['id'] for v in videos] + [p['id'] for p in pending])
+    
+    total_new = 0
+    
+    for channel in tracked_channels:
+        channel_videos = get_channel_videos(channel['url'])
+        
+        for video in channel_videos:
+            if video['id'] not in existing_ids:
+                # Добавляем в pending
+                apps_script_request('pending-videos', 'POST', {
+                    'id': video['id'],
+                    'title': video['title'],
+                    'channel_id': channel['id'],
+                    'channel_name': channel['name'],
+                    'published_at': video['published_at'],
+                    'video_url': f"https://youtube.com/watch?v={video['id']}"
+                })
+                
+                existing_ids.add(video['id'])
+                total_new += 1
+    
+    if total_new > 0:
+        await update.message.reply_text(f"✅ Найдено {total_new} новых видео!")
+    else:
+        await update.message.reply_text('✨ Новых видео не найдено')
+
 async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /pending"""
     pending = apps_script_request('pending-videos', 'GET')
@@ -230,7 +319,7 @@ async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     categories = apps_script_request('categories', 'GET')
     
     if not categories:
-        await update.message.reply_text('📂 Категории не найдены')
+        await update.message.reply_text(' Категории не найдены')
         return
     
     msg = '📂 Категории:\n\n' + '\n'.join(
@@ -270,7 +359,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     msg = (
         f"📊 Статистика:\n\n"
-        f"🎬 Видео: {len(videos)}\n"
+        f" Видео: {len(videos)}\n"
         f"⏳ Pending: {len(pending)}\n"
         f"📺 Каналы: {len(channels)}\n"
         f"  🎬 Оригинальных: {originals}\n"
@@ -302,10 +391,12 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Проверяем существование
     videos = apps_script_request('videos', 'GET')
-    existing_ids = [v['id'] for v in videos]
+    pending = apps_script_request('pending-videos', 'GET')
+    
+    existing_ids = set([v['id'] for v in videos] + [p['id'] for p in pending])
     
     if video_id in existing_ids:
-        await update.message.reply_text('⚠️ Это видео уже есть в таблице')
+        await update.message.reply_text('️ Это видео уже есть в таблице')
         return
     
     # Получаем информацию о видео
@@ -342,6 +433,7 @@ def main():
     application.add_handler(CommandHandler("track", track_command))
     application.add_handler(CommandHandler("untrack", untrack_command))
     application.add_handler(CommandHandler("settype", set_type_command))
+    application.add_handler(CommandHandler("refresh", refresh_command))
     application.add_handler(CommandHandler("pending", pending_command))
     application.add_handler(CommandHandler("categories", categories_command))
     application.add_handler(CommandHandler("addcat", add_category_command))
