@@ -1,4 +1,5 @@
 import os
+import re
 import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -28,6 +29,7 @@ def apps_script_request(path, method='GET', body=None, params=None):
     return response.json()
 
 # ===== КОМАНДЫ =====
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
     keyboard = [
@@ -47,12 +49,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /help"""
     await update.message.reply_text(
-        ' Справка:\n\n'
-        ' Отправьте ссылку на YouTube — видео добавится в pending\n'
+        '📖 Справка:\n\n'
+        '📹 Отправьте ссылку на YouTube — видео добавится в pending\n'
         '/app — открыть мини-приложение\n'
         '/channels — список каналов\n'
+        '/addchannel <name> <url> [original|translation] — добавить канал\n'
+        '/track <channel_id> — включить отслеживание\n'
+        '/untrack <channel_id> — выключить отслеживание\n'
+        '/settype <channel_id> <original|translation> — тип канала\n'
         '/pending — ожидающие видео\n'
         '/categories — список категорий\n'
+        '/addcat <name> <short> — добавить категорию\n'
         '/stats — статистика\n'
         '/help — эта справка'
     )
@@ -61,7 +68,7 @@ async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /app"""
     keyboard = [
         [InlineKeyboardButton(
-            "🗺️ Открыть", 
+            "️ Открыть", 
             web_app=WebAppInfo(url=WEBAPP_URL)
         )]
     ]
@@ -76,7 +83,7 @@ async def channels_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     channels = apps_script_request('channels', 'GET')
     
     if not channels:
-        await update.message.reply_text(' Каналы не найдены')
+        await update.message.reply_text('📺 Каналы не найдены')
         return
     
     msg = '📺 Каналы:\n\n'
@@ -92,12 +99,112 @@ async def channels_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += '\n'
     
     if translations:
-        msg += ' ПЕРЕВОДЫ:\n'
+        msg += '🌐 ПЕРЕВОДЫ:\n'
         for c in translations:
             track = '✅' if c.get('tracked') else '⏸️'
             msg += f"  {track} {c['name']} ({c['id']})\n"
     
     await update.message.reply_text(msg)
+
+async def add_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /addchannel"""
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            'Использование: /addchannel <название> <url> [original|translation]\n\n'
+            'Пример: /addchannel KQ ENTERTAINMENT UCaO6TYtlC8U5ttzA2hTrZ4Q original'
+        )
+        return
+    
+    name = context.args[0]
+    url = context.args[1]
+    channel_type = context.args[2] if len(context.args) > 2 else 'original'
+    
+    if channel_type not in ('original', 'translation'):
+        await update.message.reply_text('Тип должен быть: original или translation')
+        return
+    
+    result = apps_script_request('channels', 'POST', {
+        'name': name,
+        'url': url,
+        'type': channel_type,
+        'tracked': False
+    })
+    
+    await update.message.reply_text(
+        f"✅ Канал добавлен!\n\n"
+        f"ID: {result.get('id')}\n"
+        f"Название: {name}\n"
+        f"Тип: {channel_type}\n\n"
+        f"Используйте /track {result.get('id')} для включения отслеживания."
+    )
+
+async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /track"""
+    if not context.args:
+        await update.message.reply_text('Использование: /track <channel_id>')
+        return
+    
+    channel_id = context.args[0]
+    
+    # Получаем канал
+    channels = apps_script_request('channels', 'GET')
+    channel = next((c for c in channels if c['id'] == channel_id), None)
+    
+    if not channel:
+        await update.message.reply_text('❌ Канал не найден')
+        return
+    
+    # Обновляем
+    channel['tracked'] = True
+    apps_script_request('channels', 'PUT', channel, {'id': channel_id})
+    
+    await update.message.reply_text(f"✅ Отслеживание канала {channel_id} включено")
+
+async def untrack_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /untrack"""
+    if not context.args:
+        await update.message.reply_text('Использование: /untrack <channel_id>')
+        return
+    
+    channel_id = context.args[0]
+    
+    channels = apps_script_request('channels', 'GET')
+    channel = next((c for c in channels if c['id'] == channel_id), None)
+    
+    if not channel:
+        await update.message.reply_text('❌ Канал не найден')
+        return
+    
+    channel['tracked'] = False
+    apps_script_request('channels', 'PUT', channel, {'id': channel_id})
+    
+    await update.message.reply_text(f"⏸️ Отслеживание канала {channel_id} выключено")
+
+async def set_type_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /settype"""
+    if len(context.args) < 2:
+        await update.message.reply_text('Использование: /settype <channel_id> <original|translation>')
+        return
+    
+    channel_id = context.args[0]
+    channel_type = context.args[1]
+    
+    if channel_type not in ('original', 'translation'):
+        await update.message.reply_text('Тип должен быть: original или translation')
+        return
+    
+    channels = apps_script_request('channels', 'GET')
+    channel = next((c for c in channels if c['id'] == channel_id), None)
+    
+    if not channel:
+        await update.message.reply_text('❌ Канал не найден')
+        return
+    
+    channel['type'] = channel_type
+    apps_script_request('channels', 'PUT', channel, {'id': channel_id})
+    
+    type_name = 'оригинальный' if channel_type == 'original' else 'переводческий'
+    await update.message.reply_text(f"✅ Тип канала {channel_id} изменен на: {type_name}")
 
 async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /pending"""
@@ -123,7 +230,7 @@ async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     categories = apps_script_request('categories', 'GET')
     
     if not categories:
-        await update.message.reply_text(' Категории не найдены')
+        await update.message.reply_text('📂 Категории не найдены')
         return
     
     msg = '📂 Категории:\n\n' + '\n'.join(
@@ -131,6 +238,25 @@ async def categories_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     )
     
     await update.message.reply_text(msg)
+
+async def add_category_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда /addcat"""
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            'Использование: /addcat <название> <краткое>\n\n'
+            'Пример: /addcat Music Video MV'
+        )
+        return
+    
+    name = context.args[0]
+    short = context.args[1]
+    
+    apps_script_request('categories', 'POST', {
+        'name': name,
+        'short_name': short
+    })
+    
+    await update.message.reply_text(f"✅ Категория добавлена: {name} ({short})")
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /stats"""
@@ -144,11 +270,11 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     msg = (
         f"📊 Статистика:\n\n"
-        f" Видео: {len(videos)}\n"
+        f"🎬 Видео: {len(videos)}\n"
         f"⏳ Pending: {len(pending)}\n"
         f"📺 Каналы: {len(channels)}\n"
         f"  🎬 Оригинальных: {originals}\n"
-        f"   Переводческих: {translations}\n"
+        f"  🌐 Переводческих: {translations}\n"
         f"  👁️ Отслеживаемых: {tracked}"
     )
     
@@ -159,7 +285,6 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text
     
     # Извлекаем video ID
-    import re
     patterns = [
         r'(?:v=|\/)([0-9A-Za-z_-]{11}).*',
         r'^([0-9A-Za-z_-]{11})$'
@@ -206,22 +331,26 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
-    # Создаём приложение
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Регистрируем обработчики
+    # Команды
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("app", app_command))
     application.add_handler(CommandHandler("channels", channels_command))
+    application.add_handler(CommandHandler("addchannel", add_channel_command))
+    application.add_handler(CommandHandler("track", track_command))
+    application.add_handler(CommandHandler("untrack", untrack_command))
+    application.add_handler(CommandHandler("settype", set_type_command))
     application.add_handler(CommandHandler("pending", pending_command))
     application.add_handler(CommandHandler("categories", categories_command))
+    application.add_handler(CommandHandler("addcat", add_category_command))
     application.add_handler(CommandHandler("stats", stats_command))
     
-    # Обработка ссылок YouTube
+    # Обработка ссылок
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
     
-    print(" Бот запущен...")
+    print("🤖 Бот запущен...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == '__main__':
