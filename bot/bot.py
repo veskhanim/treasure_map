@@ -545,18 +545,12 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     
                     # Получаем точный ID канала с YouTube
                     yt_channel_id = snippet.get('channelId', '')
-                    # Дата публикации (формат dd.mm.yyyy)
-                    published_at_iso = snippet.get('publishedAt', '')
                     if published_at_iso:
-                        # Парсим ISO дату: 2026-07-22T15:37:35.975Z
                         pub_date = datetime.fromisoformat(published_at_iso.replace('Z', '+00:00'))
                         published_at = pub_date.strftime('%d.%m.%Y')
-                    else:
-                        published_at = ''
+                        print(f" Дата публикации: {published_at}")
                     
-                    print(f"🎯 YouTube channel ID: {yt_channel_id}")
-                    
-                    # Длительность (формат hh.mm - часы.минуты)
+                    # Длительность - форматируем как hh:mm:ss или mm:ss
                     duration_iso = video_info['contentDetails']['duration']
                     hours = re.search(r'(\d+)H', duration_iso)
                     minutes = re.search(r'(\d+)M', duration_iso)
@@ -566,11 +560,13 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     m = int(minutes.group(1)) if minutes else 0
                     s = int(seconds.group(1)) if seconds else 0
                     
-                    # Формат hh.mm (часы.минуты)
-                    if h == 0:
-                        duration = f'{m:02d}:{s:02d}'
+                    # Формат: hh:mm:ss если есть часы, иначе mm:ss
+                    if h > 0:
+                        duration = f'{h}:{m:02d}:{s:02d}'
                     else:
-                        duration = f'{h}:{m:02d}:{s:02d}'                   
+                        duration = f'{m}:{s:02d}'
+                    
+                    print(f"⏱️ Длительность: {duration}")                 
                     
                     
                     # 4. Ищем совпадение по ID канала
