@@ -1494,25 +1494,25 @@ function renderVideoCard(video, controlsHtml) {
                     <span>${video.date ? video.date.split('-').reverse().join('.') : ''}</span>
                 </div>
             </div>
-           <div class="video-actions">
-                ${origUrl ? `
-                    <a class="video-link kr" href="${origUrl}" target="_blank">
+              <div class="video-actions">
+                ${krUrl ? `
+                    <a class="video-link kr" href="${krUrl}" target="_blank">
                         <svg class="icon icon-sm"><use href="#i-link"/></svg>
-                        ${originalLang.toUpperCase()}
+                        KR
                     </a>
                 ` : ''}
                 
                 ${enUrl && !krUrl ? `
-                    <a class="video-link en" href="${enUrl}" target="_blank" style="background:rgba(66,133,244,0.2);border-color:rgba(66,133,244,0.3);color:#4285f4;">
+                    <a class="video-link en" href="${enUrl}" target="_blank">
                         <svg class="icon icon-sm"><use href="#i-link"/></svg>
-                        EN (оригинал)
+                        EN
                     </a>
                 ` : ''}
                 
                 ${enUrl && krUrl ? `
-                    <a class="video-link en" href="${enUrl}" target="_blank" style="background:rgba(66,133,244,0.1);border:1px solid rgba(66,133,244,0.2);color:rgba(66,133,244,0.8);">
+                    <a class="video-link en" href="${enUrl}" target="_blank">
                         <svg class="icon icon-sm"><use href="#i-link"/></svg>
-                        EN (перевод)
+                        EN
                     </a>
                 ` : ''}
                 
@@ -1521,7 +1521,7 @@ function renderVideoCard(video, controlsHtml) {
                         <svg class="icon icon-sm"><use href="#i-link"/></svg>
                         RU
                     </a>
-                ` : '<span class="video-link disabled" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.3);padding:6px 10px;border-radius:6px;font-size:12px;font-weight:700;">RU</span>'}
+                ` : '<span class="video-link disabled">RU</span>'}
                 
                 <div class="watched-progress" onclick="toggleWatchedProgress('${video.id}')">
                     <div class="progress-bar" data-state="${state}">
