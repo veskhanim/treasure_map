@@ -495,20 +495,21 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         existing_video_ids.update([str(p.get('id', '')) for p in pending])
     
     if video_id in existing_video_ids:
-        await update.message.reply_text('⚠️ Это видео уже есть в таблице')
+        await update.message.reply_text('️ Это видео уже есть в таблице')
         return
     
-    # Получаем информацию о видео
     try:
-        # 1. Сначала пробуем oEmbed (быстро, но мало информации)
+        # 1. Получаем базовую информацию через oEmbed
         oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
         oembed_response = requests.get(oembed_url, timeout=10)
         oembed_data = oembed_response.json() if oembed_response.status_code == 200 else {}
         
-        # 2. Если есть YouTube API ключ, получаем полную информацию
+        channel_id = 'manual'
+        channel_name = oembed_data.get('author_name', 'Неизвестно')
         duration = ''
         published_at = ''
         
+        # 2. Если есть YouTube API ключ, получаем точный channel_id и длительность
         if YOUTUBE_API_KEY:
             try:
                 api_url = f'https://www.googleapis.com/youtube/v3/videos'
@@ -525,38 +526,55 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                 
                 if api_data.get('items'):
                     video_info = api_data['items'][0]
+                    snippet = video_info['snippet']
                     
-                    # Дата публикации
-                    published_at = video_info['snippet']['publishedAt']
+                    # Получаем точный ID канала с YouTube
+                    yt_channel_id = snippet.get('channelId', '')
+                    published_at = snippet.get('publishedAt', '')
                     
-                    # Длительность (формат ISO 8601: PT3M30S)
+                    # Длительность
                     duration_iso = video_info['contentDetails']['duration']
-                    
-                    # Конвертируем ISO 8601 в читаемый формат (PT3M30S → 3:30)
-                    import re as regex
-                    hours = regex.search(r'(\d+)H', duration_iso)
-                    minutes = regex.search(r'(\d+)M', duration_iso)
-                    seconds = regex.search(r'(\d+)S', duration_iso)
+                    hours = re.search(r'(\d+)H', duration_iso)
+                    minutes = re.search(r'(\d+)M', duration_iso)
+                    seconds = re.search(r'(\d+)S', duration_iso)
                     
                     h = int(hours.group(1)) if hours else 0
                     m = int(minutes.group(1)) if minutes else 0
                     s = int(seconds.group(1)) if seconds else 0
                     
-                    if h > 0:
-                        duration = f'{h}:{m:02d}:{s:02d}'
-                    else:
-                        duration = f'{m}:{s:02d}'
-                        
+                    duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+                    
+                    # 3. Ищем этот channel_id в нашей таблице Channels
+                    channels = apps_script_request('channels', 'GET')
+                    if isinstance(channels, list):
+                        for ch in channels:
+                            # Сравниваем ID канала (обычно хранится в поле url)
+                            if str(ch.get('url', '')).strip() == yt_channel_id:
+                                channel_id = ch.get('id', 'manual')
+                                channel_name = ch.get('name', channel_name)
+                                break
+                    
             except Exception as e:
-                print(f"⚠️ Не удалось получить данные через YouTube API: {e}")
-                # Если API не сработал, используем данные из oEmbed
+                print(f"⚠️ Ошибка YouTube API: {e}")
         
-        # Добавляем в pending
+        # 4. Fallback: если API не сработал или нет ключа, ищем по названию канала
+        if channel_id == 'manual':
+            channels = apps_script_request('channels', 'GET')
+            if isinstance(channels, list):
+                for ch in channels:
+                    # Сравниваем названия (без учёта регистра и пробелов)
+                    db_name = str(ch.get('name', '')).lower().strip()
+                    oembed_name = channel_name.lower().strip()
+                    if db_name == oembed_name:
+                        channel_id = ch.get('id', 'manual')
+                        break
+        
+        # 5. Добавляем в pending
         result = apps_script_request('pending-videos', 'POST', {
             'id': video_id,
             'title': oembed_data.get('title', 'Без названия'),
-            'channel_id': 'manual',
-            'channel_name': oembed_data.get('author_name', 'Неизвестно'),
+            'channel_id': channel_id,
+            'channel_name': channel_name,
             'published_at': published_at,
             'duration': duration,
             'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
@@ -564,19 +582,24 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         })
         
         if isinstance(result, dict) and result.get('success'):
-            duration_text = f" {duration}" if duration else ""
-            await update.message.reply_text(
-                f"✅ Видео добавлено в pending!\n\n"
-                f"📹 {oembed_data.get('title', 'Без названия')}\n"
-                f"👤 {oembed_data.get('author_name', 'Неизвестно')}\n"
-                f"{duration_text}"
-            )
+            duration_text = f"⏱ {duration}" if duration else ""
+            channel_text = f"📺 {channel_name}" if channel_name != 'Неизвестно' else ""
+            
+            msg = f"✅ Видео добавлено в pending!\n\n"
+            msg += f"📹 {oembed_data.get('title', 'Без названия')}\n"
+            if channel_text: msg += f"{channel_text}\n"
+            if duration_text: msg += f"{duration_text}\n"
+            
+            if channel_id == 'manual':
+                msg += "\n⚠️ Канал не найден в таблице. ID установлен как 'manual'"
+            
+            await update.message.reply_text(msg)
         else:
             error_msg = result.get('error', 'Неизвестная ошибка') if isinstance(result, dict) else str(result)
-            await update.message.reply_text(f' Ошибка при добавлении: {error_msg}')
+            await update.message.reply_text(f'❌ Ошибка при добавлении: {error_msg}')
             
     except requests.exceptions.Timeout:
-        await update.message.reply_text('❌ Таймаут при получении информации о видео')
+        await update.message.reply_text(' Таймаут при получении информации о видео')
     except Exception as e:
         await update.message.reply_text(f'❌ Ошибка: {str(e)}')
 
