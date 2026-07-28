@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
@@ -353,12 +354,14 @@ async def refresh_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if video['id'] not in existing_ids:
                 # Добавляем в pending
                 apps_script_request('pending-videos', 'POST', {
-                    'id': video['id'],
-                    'title': video['title'],
-                    'channel_id': channel['id'],
-                    'channel_name': channel['name'],
-                    'published_at': video['published_at'],
-                    'video_url': f"https://youtube.com/watch?v={video['id']}"
+                    'id': video_id,
+                    'title': oembed_data.get('title', 'Без названия'),
+                    'channel_id': channel_id,
+                    'channel_name': channel_name,
+                    'published_at': published_at,  # dd.mm.yyyy
+                    'duration': duration,          # hh.mm
+                    'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
+                    'video_url': f'https://youtube.com/watch?v={video_id}'
                 })
                 
                 existing_ids.add(video['id'])
