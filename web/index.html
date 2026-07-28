@@ -1144,14 +1144,14 @@
                 </button>
                 <div class="dropdown-menu" id="memberMenu">
                     <div class="dropdown-menu-item" data-member="all"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>от8</div>
-                    <div class="dropdown-menu-item" data-member="hongjoong"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Hongjoong</div>
-                    <div class="dropdown-menu-item" data-member="seonghwa"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Seonghwa</div>
-                    <div class="dropdown-menu-item" data-member="yunho"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Yunho</div>
-                    <div class="dropdown-menu-item" data-member="yeosang"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Yeosang</div>
-                    <div class="dropdown-menu-item" data-member="san"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>San</div>
-                    <div class="dropdown-menu-item" data-member="mingi"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Mingi</div>
-                    <div class="dropdown-menu-item" data-member="wooyoung"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Wooyoung</div>
-                    <div class="dropdown-menu-item" data-member="jongho"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Jongho</div>
+                    <div class="dropdown-menu-item" data-member="Hongjoong"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Hongjoong</div>
+                    <div class="dropdown-menu-item" data-member="Seonghwa"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Seonghwa</div>
+                    <div class="dropdown-menu-item" data-member="Yunho"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Yunho</div>
+                    <div class="dropdown-menu-item" data-member="Yeosang"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Yeosang</div>
+                    <div class="dropdown-menu-item" data-member="San"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>San</div>
+                    <div class="dropdown-menu-item" data-member="Mingi"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Mingi</div>
+                    <div class="dropdown-menu-item" data-member="Wooyoung"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Wooyoung</div>
+                    <div class="dropdown-menu-item" data-member="Jongho"><svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Jongho</div>
                 </div>
             </div>
         </div>
@@ -1753,14 +1753,14 @@ function openApproveModal(videoId) {
     // Заполняем участников
     const membersContainer = document.getElementById('approveMembers');
     const allMembers = [
-        {id: 'hongjoong', name: 'Хонджун'},
-        {id: 'seonghwa', name: 'Сонхва'},
-        {id: 'yunho', name: 'Юнхо'},
-        {id: 'yeosang', name: 'Ёсан'},
-        {id: 'san', name: 'Сан'},
-        {id: 'mingi', name: 'Минги'},
-        {id: 'wooyoung', name: 'Уён'},
-        {id: 'jongho', name: 'Чонхо'}
+        {id: 'Hongjoong', name: 'Хонджун'},
+        {id: 'Seonghwa', name: 'Сонхва'},
+        {id: 'Yunho', name: 'Юнхо'},
+        {id: 'Yeosang', name: 'Ёсан'},
+        {id: 'San', name: 'Сан'},
+        {id: 'Mingi', name: 'Минги'},
+        {id: 'Wooyoung', name: 'Уён'},
+        {id: 'Jongho', name: 'Чонхо'}
     ];
     
     membersContainer.innerHTML = allMembers.map(m => `
@@ -1792,7 +1792,7 @@ async function approvePendingVideo() {
     // Собираем участников
     let members = [];
     if (approveAllMembers) {
-        members = ['hongjoong', 'seonghwa', 'yunho', 'yeosang', 'san', 'mingi', 'wooyoung', 'jongho'];
+        members = ['Hongjoong', 'Seonghwa', 'Yunho', 'Yeosang', 'San', 'Mingi', 'Wooyoung', 'Jongho'];
     } else {
         const activeBtns = document.querySelectorAll('#approveMembers .member-select-btn.active');
         members = Array.from(activeBtns).map(btn => btn.dataset.member);
@@ -1970,7 +1970,7 @@ function openEditModal(videoId) {
     const membersContainer = document.getElementById('editMembers');
     membersContainer.innerHTML = '';
     
-    const allMembers = ['hongjoong', 'seonghwa', 'yunho', 'yeosang', 'san', 'mingi', 'wooyoung', 'jongho'];
+    const allMembers = ['Hongjoong', 'Seonghwa', 'Yunho', 'Yeosang', 'San', 'Mingi', 'Wooyoung', 'Jongho'];
     allMembers.forEach(memberId => {
         const tag = document.createElement('div');
         tag.className = 'modal-member-tag';
