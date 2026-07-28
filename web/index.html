@@ -924,6 +924,35 @@
         }
         .modal-overlay.visible { display: flex; }
 
+        .lang-option {
+            transition: all 0.2s;
+        }
+        .lang-option.active {
+            background: rgba(255,107,0,0.3) !important;
+            border-color: var(--orange) !important;
+            color: var(--orange) !important;
+        }
+        .lang-option:active {
+            transform: scale(0.95);
+        }
+        
+        .member-select-btn {
+            transition: all 0.2s;
+        }
+        .member-select-btn.active {
+            background: rgba(255,107,0,0.3) !important;
+            border-color: var(--orange) !important;
+            color: var(--orange) !important;
+        }
+        .member-select-btn:active {
+            transform: scale(0.95);
+        }
+        
+        .modal-input option {
+            background: #1a1a1a;
+            color: white;
+        }
+
         .modal-content {
             background: var(--card-bg);
             border: 2px solid rgba(255,107,0,0.5);
@@ -1665,17 +1694,85 @@ async function deletePlaylist(playlistId) {
     await loadData();
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
+let approveLang = 'kr';
+let approveAllMembers = false;
 
+function selectApproveLang(lang) {
+    approveLang = lang;
+    document.querySelectorAll('.lang-option').forEach(opt => {
+        opt.classList.remove('active');
+        opt.style.background = 'rgba(255,255,255,0.05)';
+        opt.style.borderColor = 'rgba(255,255,255,0.15)';
+        opt.style.color = 'var(--white)';
+    });
+    const activeBtn = document.querySelector(`.lang-option[data-lang="${lang}"]`);
+    activeBtn.classList.add('active');
+    activeBtn.style.background = 'rgba(255,107,0,0.3)';
+    activeBtn.style.borderColor = 'var(--orange)';
+    activeBtn.style.color = 'var(--orange)';
+}
+
+function toggleAllMembers(btn) {
+    approveAllMembers = !approveAllMembers;
+    btn.classList.toggle('active');
+    
+    // Если выбраны все - снимаем выделение с отдельных
+    if (approveAllMembers) {
+        document.querySelectorAll('#approveMembers .member-select-btn').forEach(b => {
+            b.classList.remove('active');
+        });
+    }
+}
+
+function toggleMemberBtn(btn) {
+    // Снимаем "от8" если выбран конкретный участник
+    approveAllMembers = false;
+    document.querySelector('[data-member="all"]').classList.remove('active');
+    
+    btn.classList.toggle('active');
+}
+    
 function openApproveModal(videoId) {
     const video = pendingVideos.find(v => v.id === videoId);
     if (!video) return;
     
-    document.getElementById('approveVideoId').value = videoId;
+    // Сброс значений
+    approveLang = 'kr';
+    approveAllMembers = false;
+    
+    // Заполняем данные
+    document.getElementById('approveVideoThumb').src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     document.getElementById('approveVideoTitle').textContent = video.title;
     
-    const select = document.getElementById('approveCategory');
-    select.innerHTML = categories.map(c => `<option value="${c.name}">${c.name}</option>`).join('');
+    // Заполняем категории
+    const categorySelect = document.getElementById('approveCategory');
+    categorySelect.innerHTML = categories.map(c => 
+        `<option value="${c.name}">${c.name}</option>`
+    ).join('');
     
+    // Заполняем участников
+    const membersContainer = document.getElementById('approveMembers');
+    const allMembers = [
+        {id: 'hongjoong', name: 'Хонджун'},
+        {id: 'seonghwa', name: 'Сонхва'},
+        {id: 'yunho', name: 'Юнхо'},
+        {id: 'yeosang', name: 'Ёсан'},
+        {id: 'san', name: 'Сан'},
+        {id: 'mingi', name: 'Минги'},
+        {id: 'wooyoung', name: 'Уён'},
+        {id: 'jongho', name: 'Чонхо'}
+    ];
+    
+    membersContainer.innerHTML = allMembers.map(m => `
+        <button class="member-select-btn" data-member="${m.id}" onclick="toggleMemberBtn(this)" style="padding:6px 12px;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.15);border-radius:6px;color:var(--white);font-size:11px;font-weight:600;cursor:pointer;">
+            ${m.name}
+        </button>
+    `).join('');
+    
+    // Сброс кнопки "от8"
+    document.querySelector('[data-member="all"]').classList.remove('active');
+    
+    // Показываем модалку
     document.getElementById('approveModal').classList.add('visible');
 }
 
@@ -1684,18 +1781,56 @@ function closeApproveModal() {
 }
 
 async function approvePendingVideo() {
-    const videoId = document.getElementById('approveVideoId').value;
+    const videoId = document.getElementById('approveVideoThumb').src.split('/vi/')[1]?.split('/')[0];
+    if (!videoId) {
+        alert('Ошибка: не найден ID видео');
+        return;
+    }
+    
     const category = document.getElementById('approveCategory').value;
     
-    await apiRequest('pending-approve', 'POST', {
-        id: videoId,
-        category: category,
-        members: []
-    });
+    // Собираем участников
+    let members = [];
+    if (approveAllMembers) {
+        members = ['hongjoong', 'seonghwa', 'yunho', 'yeosang', 'san', 'mingi', 'wooyoung', 'jongho'];
+    } else {
+        const activeBtns = document.querySelectorAll('#approveMembers .member-select-btn.active');
+        members = Array.from(activeBtns).map(btn => btn.dataset.member);
+    }
     
-    closeApproveModal();
-    await loadData();
-    if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    if (members.length === 0) {
+        alert('Выберите хотя бы одного участника или "от8"');
+        return;
+    }
+    
+    // Показываем загрузку
+    const saveBtn = document.querySelector('#approveModal .modal-btn.save');
+    const originalText = saveBtn.textContent;
+    saveBtn.textContent = 'Добавление...';
+    saveBtn.disabled = true;
+    
+    try {
+        const result = await apiRequest('pending-approve', 'POST', {
+            id: videoId,
+            category: category,
+            members: members,
+            original_lang: approveLang
+        });
+        
+        if (result.error) {
+            alert('Ошибка: ' + result.error);
+            return;
+        }
+        
+        closeApproveModal();
+        await loadData();
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } catch (error) {
+        alert('Ошибка при добавлении: ' + error.message);
+    } finally {
+        saveBtn.textContent = originalText;
+        saveBtn.disabled = false;
+    }
 }
 
 async function skipPendingVideo(videoId) {
@@ -1939,5 +2074,61 @@ document.addEventListener('click', function(e) {
 loadData();
 </script>
 
+    <!-- Модальное окно одобрения видео -->
+<div class="modal-overlay" id="approveModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title">Добавить видео</div>
+            <button class="modal-close" onclick="closeApproveModal()">
+                <svg class="icon"><use href="#i-x"/></svg>
+            </button>
+        </div>
+        
+        <div class="video-thumbnail" style="width:100%;height:180px;margin-bottom:16px;">
+            <img id="approveVideoThumb" src="" alt="">
+        </div>
+        
+        <div class="modal-field">
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px;" id="approveVideoTitle"></div>
+        </div>
+        
+        <!-- Выбор языка оригинала -->
+        <div class="modal-field">
+            <div class="modal-label">Язык оригинала</div>
+            <div class="lang-options" style="display:flex;gap:8px;">
+                <button class="lang-option active" data-lang="kr" onclick="selectApproveLang('kr')" style="flex:1;padding:10px;background:rgba(255,107,0,0.2);border:2px solid var(--orange);border-radius:8px;color:var(--white);font-weight:700;cursor:pointer;">
+                    🇰🇷 Корейский
+                </button>
+                <button class="lang-option" data-lang="en" onclick="selectApproveLang('en')" style="flex:1;padding:10px;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-weight:700;cursor:pointer;">
+                    🇬🇧 Английский
+                </button>
+            </div>
+        </div>
+        
+        <!-- Выбор категории -->
+        <div class="modal-field">
+            <div class="modal-label">Категория</div>
+            <select class="modal-input" id="approveCategory" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:14px;outline:none;">
+            </select>
+        </div>
+        
+        <!-- Выбор участников -->
+        <div class="modal-field">
+            <div class="modal-label">Участники</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+                <button class="member-select-btn" data-member="all" onclick="toggleAllMembers(this)" style="padding:6px 12px;background:rgba(255,107,0,0.2);border:2px solid var(--orange);border-radius:6px;color:var(--white);font-size:12px;font-weight:700;cursor:pointer;">
+                    от8
+                </button>
+            </div>
+            <div id="approveMembers" style="display:flex;gap:6px;flex-wrap:wrap;">
+            </div>
+        </div>
+        
+        <div class="modal-actions">
+            <button class="modal-btn cancel" onclick="closeApproveModal()">Отмена</button>
+            <button class="modal-btn save" onclick="approvePendingVideo()">Добавить</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>
