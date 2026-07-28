@@ -567,8 +567,10 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     s = int(seconds.group(1)) if seconds else 0
                     
                     # Формат hh.mm (часы.минуты)
-                    duration = f'{h}.{m:02d}'
-                    
+                    if h == 0:
+                        duration = f'{m:02d}:{s:02d}'
+                    else:
+                        duration = f'{h}:{m:02d}:{s:02d}'                   
                     
                     
                     # 4. Ищем совпадение по ID канала
