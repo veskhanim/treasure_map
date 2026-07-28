@@ -434,32 +434,35 @@
         }
 
         .progress-bar {
-            height: 24px;
-            border-radius: 6px;
-            background: rgba(255,255,255,0.08);
-            border: 1.5px solid rgba(255,255,255,0.15);
             position: relative;
+            width: 100%;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
             overflow: hidden;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            cursor: pointer;
         }
-
+        
         .progress-fill {
             position: absolute;
-            top: 0; left: 0;
+            top: 0;
+            left: 0;
             height: 100%;
-            width: 0;
+            background: var(--orange);
             transition: width 0.3s ease;
+            border-radius: 6px;
         }
-        .progress-bar[data-state="original"] .progress-fill { width: 50%; background: linear-gradient(90deg, var(--orange), var(--sand)); }
-        .progress-bar[data-state="translated"] .progress-fill { width: 100%; background: linear-gradient(90deg, var(--orange), var(--sand), var(--sand-light)); }
-
+        
         .progress-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             font-size: 11px;
             font-weight: 700;
-            color: rgba(255,255,255,0.6);
+            color: white;
             z-index: 1;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
         }
 
         .playlists-container { padding: 12px; }
@@ -1462,19 +1465,34 @@ function renderVideoCard(video, controlsHtml) {
     
     const memberTagsHtml = renderMemberTags(members);
     
-    // Определяем состояние прогресса
-    let state = 'none';
+    // Определяем процент заполнения прогресс-бара
+    let progressPercent = 0;
     let label = '—';
     
-    if (ruUrl && watchedRu) {
-        state = 'translated';
+    // Если перевода нет, но оригинал просмотрен — 100%
+    if (!ruUrl && watchedOriginal) {
+        progressPercent = 100;
         label = '✓';
-    } else if (enUrl && !ruUrl && watchedEn) {
-        state = 'translated';
+    }
+    // Если перевод есть и просмотрен — 100%
+    else if (ruUrl && watchedRu) {
+        progressPercent = 100;
         label = '✓';
-    } else if ((krUrl || enUrl) && watchedOriginal) {
-        state = 'original';
-        label = originalLang.toUpperCase();
+    }
+    // Если перевод есть, но не просмотрен, а оригинал просмотрен — 50%
+    else if (ruUrl && !watchedRu && watchedOriginal) {
+        progressPercent = 50;
+        label = '50%';
+    }
+    // Если только оригинал и не просмотрен — 0%
+    else if (!ruUrl && !watchedOriginal) {
+        progressPercent = 0;
+        label = '—';
+    }
+    // Если только перевод и не просмотрен — 0%
+    else if (ruUrl && !watchedRu && !watchedOriginal) {
+        progressPercent = 0;
+        label = '—';
     }
     
     const origUrl = originalLang === 'kr' ? krUrl : enUrl;
@@ -1533,8 +1551,8 @@ function renderVideoCard(video, controlsHtml) {
                 ` : '<span class="video-link disabled">RU</span>'}
                 
                 <div class="watched-progress" onclick="toggleWatchedProgress('${video.id}')">
-                    <div class="progress-bar" data-state="${state}">
-                        <div class="progress-fill"></div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${progressPercent}%"></div>
                         <span class="progress-label">${label}</span>
                     </div>
                 </div>
