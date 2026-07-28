@@ -495,7 +495,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         existing_video_ids.update([str(p.get('id', '')) for p in pending])
     
     if video_id in existing_video_ids:
-        await update.message.reply_text('️ Это видео уже есть в таблице')
+        await update.message.reply_text('⚠️ Это видео уже есть в таблице')
         return
     
     try:
@@ -509,8 +509,20 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         duration = ''
         published_at = ''
         
-        # 2. Если есть YouTube API ключ, получаем точный channel_id и длительность
+        print(f"🔍 Видео ID: {video_id}")
+        print(f" Название канала из oEmbed: {channel_name}")
+        
+        # 2. Получаем список каналов из таблицы
+        channels = apps_script_request('channels', 'GET')
+        print(f"📋 Получено каналов из таблицы: {len(channels) if isinstance(channels, list) else 0}")
+        
+        if isinstance(channels, list):
+            for ch in channels:
+                print(f"  - Канал: id={ch.get('id')}, name={ch.get('name')}, url={ch.get('url')}")
+        
+        # 3. Если есть YouTube API ключ, получаем точный channel_id
         if YOUTUBE_API_KEY:
+            print(f"🔑 YouTube API ключ установлен")
             try:
                 api_url = f'https://www.googleapis.com/youtube/v3/videos'
                 api_response = requests.get(
@@ -532,6 +544,8 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     yt_channel_id = snippet.get('channelId', '')
                     published_at = snippet.get('publishedAt', '')
                     
+                    print(f"🎯 YouTube channel ID: {yt_channel_id}")
+                    
                     # Длительность
                     duration_iso = video_info['contentDetails']['duration']
                     hours = re.search(r'(\d+)H', duration_iso)
@@ -544,32 +558,55 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     
                     duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
                     
-                    # 3. Ищем этот channel_id в нашей таблице Channels
-                    channels = apps_script_request('channels', 'GET')
+                    # 4. Ищем совпадение по ID канала
                     if isinstance(channels, list):
                         for ch in channels:
-                            # Сравниваем ID канала (обычно хранится в поле url)
-                            if str(ch.get('url', '')).strip() == yt_channel_id:
+                            ch_url = str(ch.get('url', '')).strip()
+                            # Сравниваем с ID канала (UC...)
+                            if ch_url == yt_channel_id:
                                 channel_id = ch.get('id', 'manual')
                                 channel_name = ch.get('name', channel_name)
+                                print(f"✅ Найдено совпадение по ID: {channel_id}")
                                 break
+                            # Также пробуем извлечь ID из полной ссылки
+                            if 'youtube.com/channel/' in ch_url:
+                                extracted_id = ch_url.split('youtube.com/channel/')[-1].split('/')[0]
+                                if extracted_id == yt_channel_id:
+                                    channel_id = ch.get('id', 'manual')
+                                    channel_name = ch.get('name', channel_name)
+                                    print(f"✅ Найдено совпадение по ссылке канала: {channel_id}")
+                                    break
+                else:
+                    print(f"️ YouTube API не вернул данные для видео")
                     
             except Exception as e:
-                print(f"⚠️ Ошибка YouTube API: {e}")
+                print(f"❌ Ошибка YouTube API: {e}")
+        else:
+            print(f"️ YouTube API ключ НЕ установлен")
         
-        # 4. Fallback: если API не сработал или нет ключа, ищем по названию канала
+        # 5. Fallback: если не нашли по ID, ищем по названию
+        if channel_id == 'manual' and isinstance(channels, list):
+            print(f" Пробуем найти по названию канала...")
+            for ch in channels:
+                db_name = str(ch.get('name', '')).lower().strip()
+                oembed_name = channel_name.lower().strip()
+                
+                # Точное совпадение
+                if db_name == oembed_name:
+                    channel_id = ch.get('id', 'manual')
+                    print(f"✅ Найдено совпадение по названию: {channel_id}")
+                    break
+                
+                # Частичное совпадение (если одно название содержится в другом)
+                if db_name in oembed_name or oembed_name in db_name:
+                    channel_id = ch.get('id', 'manual')
+                    print(f"✅ Найдено частичное совпадение по названию: {channel_id}")
+                    break
+        
         if channel_id == 'manual':
-            channels = apps_script_request('channels', 'GET')
-            if isinstance(channels, list):
-                for ch in channels:
-                    # Сравниваем названия (без учёта регистра и пробелов)
-                    db_name = str(ch.get('name', '')).lower().strip()
-                    oembed_name = channel_name.lower().strip()
-                    if db_name == oembed_name:
-                        channel_id = ch.get('id', 'manual')
-                        break
+            print(f" Канал не найден, устанавливаем manual")
         
-        # 5. Добавляем в pending
+        # 6. Добавляем в pending
         result = apps_script_request('pending-videos', 'POST', {
             'id': video_id,
             'title': oembed_data.get('title', 'Без названия'),
@@ -589,9 +626,10 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             msg += f"📹 {oembed_data.get('title', 'Без названия')}\n"
             if channel_text: msg += f"{channel_text}\n"
             if duration_text: msg += f"{duration_text}\n"
+            msg += f"\n🆔 Channel ID: {channel_id}"
             
             if channel_id == 'manual':
-                msg += "\n⚠️ Канал не найден в таблице. ID установлен как 'manual'"
+                msg += "\n⚠️ Канал не найден в таблице"
             
             await update.message.reply_text(msg)
         else:
@@ -599,7 +637,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text(f'❌ Ошибка при добавлении: {error_msg}')
             
     except requests.exceptions.Timeout:
-        await update.message.reply_text(' Таймаут при получении информации о видео')
+        await update.message.reply_text('❌ Таймаут при получении информации о видео')
     except Exception as e:
         await update.message.reply_text(f'❌ Ошибка: {str(e)}')
 
