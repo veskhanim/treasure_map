@@ -582,7 +582,6 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ===== ПРОВЕРКА ДОСТУПА =====
 def check_access(telegram_id: int) -> bool:
-    return True
     """Проверяет, есть ли у пользователя доступ"""
     try:
         url = f"{APPS_SCRIPT_URL}?path=users"
