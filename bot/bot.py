@@ -467,11 +467,11 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обработка ссылок на YouTube"""
     text = update.message.text
     
-    # Извлекаем video ID из разных форматов ссылок
+    # Извлекаем video ID
     patterns = [
-        r'(?:v=|\/)([0-9A-Za-z_-]{11})',  # youtube.com/watch?v=ID или youtu.be/ID
-        r'^([0-9A-Za-z_-]{11})$',           # просто ID
-        r'shorts\/([0-9A-Za-z_-]{11})',    # youtube.com/shorts/ID
+        r'(?:v=|\/)([0-9A-Za-z_-]{11})',
+        r'^([0-9A-Za-z_-]{11})$',
+        r'shorts\/([0-9A-Za-z_-]{11})',
     ]
     
     video_id = None
@@ -482,13 +482,12 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             break
     
     if not video_id:
-        return  # Не ссылка на YouTube, игнорируем
+        return
     
-    # Проверяем, есть ли уже такое видео
+    # Проверяем существование
     videos = apps_script_request('videos', 'GET')
     pending = apps_script_request('pending-videos', 'GET')
     
-    # Безопасно получаем списки ID
     existing_video_ids = set()
     if isinstance(videos, list):
         existing_video_ids.update([str(v.get('id', '')) for v in videos])
@@ -499,39 +498,82 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text('⚠️ Это видео уже есть в таблице')
         return
     
-    # Получаем информацию о видео через YouTube oEmbed API
+    # Получаем информацию о видео
     try:
+        # 1. Сначала пробуем oEmbed (быстро, но мало информации)
         oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
-        response = requests.get(oembed_url, timeout=10)
+        oembed_response = requests.get(oembed_url, timeout=10)
+        oembed_data = oembed_response.json() if oembed_response.status_code == 200 else {}
         
-        if response.status_code != 200:
-            await update.message.reply_text('❌ Не удалось получить информацию о видео. Проверьте ссылку.')
-            return
+        # 2. Если есть YouTube API ключ, получаем полную информацию
+        duration = ''
+        published_at = ''
         
-        data = response.json()
+        if YOUTUBE_API_KEY:
+            try:
+                api_url = f'https://www.googleapis.com/youtube/v3/videos'
+                api_response = requests.get(
+                    api_url,
+                    params={
+                        'part': 'snippet,contentDetails',
+                        'id': video_id,
+                        'key': YOUTUBE_API_KEY
+                    },
+                    timeout=10
+                )
+                api_data = api_response.json()
+                
+                if api_data.get('items'):
+                    video_info = api_data['items'][0]
+                    
+                    # Дата публикации
+                    published_at = video_info['snippet']['publishedAt']
+                    
+                    # Длительность (формат ISO 8601: PT3M30S)
+                    duration_iso = video_info['contentDetails']['duration']
+                    
+                    # Конвертируем ISO 8601 в читаемый формат (PT3M30S → 3:30)
+                    import re as regex
+                    hours = regex.search(r'(\d+)H', duration_iso)
+                    minutes = regex.search(r'(\d+)M', duration_iso)
+                    seconds = regex.search(r'(\d+)S', duration_iso)
+                    
+                    h = int(hours.group(1)) if hours else 0
+                    m = int(minutes.group(1)) if minutes else 0
+                    s = int(seconds.group(1)) if seconds else 0
+                    
+                    if h > 0:
+                        duration = f'{h}:{m:02d}:{s:02d}'
+                    else:
+                        duration = f'{m}:{s:02d}'
+                        
+            except Exception as e:
+                print(f"⚠️ Не удалось получить данные через YouTube API: {e}")
+                # Если API не сработал, используем данные из oEmbed
         
-        # Добавляем в pending через Apps Script
+        # Добавляем в pending
         result = apps_script_request('pending-videos', 'POST', {
             'id': video_id,
-            'title': data.get('title', 'Без названия'),
+            'title': oembed_data.get('title', 'Без названия'),
             'channel_id': 'manual',
-            'channel_name': data.get('author_name', 'Неизвестно'),
-            'published_at': '',
-            'duration': '',
+            'channel_name': oembed_data.get('author_name', 'Неизвестно'),
+            'published_at': published_at,
+            'duration': duration,
             'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
             'video_url': f'https://youtube.com/watch?v={video_id}'
         })
         
-        # Проверяем результат
         if isinstance(result, dict) and result.get('success'):
+            duration_text = f" {duration}" if duration else ""
             await update.message.reply_text(
                 f"✅ Видео добавлено в pending!\n\n"
-                f"📹 {data.get('title', 'Без названия')}\n"
-                f" {data.get('author_name', 'Неизвестно')}"
+                f"📹 {oembed_data.get('title', 'Без названия')}\n"
+                f"👤 {oembed_data.get('author_name', 'Неизвестно')}\n"
+                f"{duration_text}"
             )
         else:
             error_msg = result.get('error', 'Неизвестная ошибка') if isinstance(result, dict) else str(result)
-            await update.message.reply_text(f'❌ Ошибка при добавлении: {error_msg}')
+            await update.message.reply_text(f' Ошибка при добавлении: {error_msg}')
             
     except requests.exceptions.Timeout:
         await update.message.reply_text('❌ Таймаут при получении информации о видео')
