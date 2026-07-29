@@ -2325,13 +2325,40 @@ function openEditModal(videoId) {
     
     editingVideoId = videoId;
     
+    // Определяем язык оригинала
+    const originalLang = video.original_lang || 'kr';
+    
     // Заполняем превью
     document.getElementById('editVideoThumb').src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     
-    // Заполняем только редактируемые поля
+    // Заполняем поля
     document.getElementById('editTitle').value = video.title || '';
     document.getElementById('editRuUrl').value = video.ru_url || '';
     document.getElementById('editHashtags').value = video.hashtags || '';
+    
+    // Показываем язык оригинала
+    const langDisplay = document.getElementById('editOriginalLangDisplay');
+    if (originalLang === 'kr') {
+        langDisplay.innerHTML = '🇰🇷 Корейский';
+        langDisplay.style.borderColor = 'rgba(255,107,0,0.5)';
+        langDisplay.style.color = '#ff6b00';
+    } else {
+        langDisplay.innerHTML = '🇬🇧 Английский';
+        langDisplay.style.borderColor = 'rgba(66,133,244,0.5)';
+        langDisplay.style.color = '#4285f4';
+    }
+    
+    // Показываем/скрываем поле EN в зависимости от языка оригинала
+    const enUrlField = document.getElementById('editEnUrlField');
+    if (originalLang === 'kr') {
+        // Если оригинал корейский - показываем поле для EN перевода
+        enUrlField.style.display = 'block';
+        document.getElementById('editEnUrl').value = video.en_url || '';
+    } else {
+        // Если оригинал английский - скрываем поле EN
+        enUrlField.style.display = 'none';
+        document.getElementById('editEnUrl').value = '';
+    }
     
     // Категория
     const categorySelect = document.getElementById('editCategory');
@@ -2373,22 +2400,36 @@ async function saveEdit() {
     const video = videos.find(v => v.id === editingVideoId);
     if (!video) return;
     
-    // Собираем ТОЛЬКО редактируемые поля
+    // Собираем редактируемые поля
     const title = document.getElementById('editTitle').value.trim();
     const ruUrl = document.getElementById('editRuUrl').value.trim();
     const hashtags = document.getElementById('editHashtags').value.trim();
     const category = document.getElementById('editCategory').value;
+    
+    // Определяем язык оригинала
+    const originalLang = video.original_lang || 'kr';
+    
+    // EN перевод только если оригинал корейский
+    let enUrl = '';
+    if (originalLang === 'kr') {
+        enUrl = document.getElementById('editEnUrl').value.trim();
+    }
     
     if (!title) {
         alert('Название не может быть пустым');
         return;
     }
     
-    // Обновляем ТОЛЬКО разрешённые поля, остальные не трогаем
+    // Обновляем только разрешённые поля
     video.title = title;
     video.ru_url = ruUrl;
     video.hashtags = hashtags;
     video.category = category;
+    
+    // EN перевод только если оригинал корейский
+    if (originalLang === 'kr') {
+        video.en_url = enUrl;
+    }
     
     // Участники
     const activeTags = document.querySelectorAll('#editMembers .modal-member-tag.active');
@@ -2660,10 +2701,23 @@ loadData();
             <input type="text" class="modal-input" id="editTitle">
         </div>
         
-        <!-- Ссылка на перевод RU -->
+        <!-- Язык оригинала (только для информации) -->
+        <div class="modal-field">
+            <div class="modal-label">Язык оригинала</div>
+            <div id="editOriginalLangDisplay" style="padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:14px;font-weight:600;">
+            </div>
+        </div>
+        
+        <!-- Ссылка на перевод RU (всегда показывается) -->
         <div class="modal-field">
             <div class="modal-label">Ссылка на перевод (RU)</div>
             <input type="text" class="modal-input" id="editRuUrl" placeholder="https://youtube.com/watch?v=...">
+        </div>
+        
+        <!-- Ссылка на перевод EN (только если оригинал корейский) -->
+        <div class="modal-field" id="editEnUrlField" style="display:none;">
+            <div class="modal-label">Ссылка на перевод (EN)</div>
+            <input type="text" class="modal-input" id="editEnUrl" placeholder="https://youtube.com/watch?v=...">
         </div>
         
         <!-- Категория -->
