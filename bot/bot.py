@@ -1011,16 +1011,19 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
     # Получаем файл
     file = None
     if update.message.document:
-        # Проверяем расширение (разрешаем txt, csv, log)
+        # Проверяем расширение
         file_name = update.message.document.file_name or ""
-        if not file_name.lower().endswith(('.txt', '.csv', '.log')):
-            await update.message.reply_text("❌ Поддерживаются только файлы .txt, .csv или .log")
+        file_ext = file_name.lower().split('.')[-1] if '.' in file_name else ''
+        
+        if file_ext not in ('txt', 'csv', 'log'):
+            # Если файл не txt/csv/log - пропускаем, пусть обработает текст
             return
+        
         file = await update.message.document.get_file()
     else:
         return
     
-    # Проверка размера (макс 2 МБ, этого хватит на ~50 000 ссылок)
+    # Проверка размера (макс 2 МБ)
     if file.file_size > 2 * 1024 * 1024:
         await update.message.reply_text("❌ Файл слишком большой. Максимальный размер: 2 МБ")
         return
@@ -1058,14 +1061,14 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
             if not found:
                 unrecognized_count += 1
         
-        video_ids = list(set(video_ids))  # Убираем дубликаты
+        video_ids = list(set(video_ids))
         
         if not video_ids:
             await status_msg.edit_text("❌ В файле не найдено ни одной корректной ссылки YouTube.")
             return
             
         if len(video_ids) > 3000:
-            await status_msg.edit_text("⚠️ Слишком много ссылок (>3000). Разбейте файл на части, чтобы избежать лимитов API.")
+            await status_msg.edit_text("⚠️ Слишком много ссылок (>3000). Разбейте файл на части.")
             return
 
         await status_msg.edit_text(f"🔍 Найдено уникальных ссылок: {len(video_ids)}\nПроверяю существующие...")
@@ -1100,7 +1103,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         # Получаем каналы один раз
         channels = apps_script_request('channels', 'GET')
         
-        batch_size = 20  # Обрабатываем по 20 видео за один запрос к Apps Script
+        batch_size = 20
         total_batches = (len(new_video_ids) + batch_size - 1) // batch_size
         current_batch = 0
         added_total = 0
@@ -1114,7 +1117,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
             
             for video_id in batch_ids:
                 try:
-                    # 1. oEmbed
                     oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
                     oembed_response = requests.get(oembed_url, timeout=10)
                     
@@ -1130,7 +1132,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     published_at = ''
                     hashtags = []
                     
-                    # 2. YouTube API
                     if YOUTUBE_API_KEY:
                         try:
                             api_url = f'https://www.googleapis.com/youtube/v3/videos'
@@ -1146,17 +1147,14 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                                 snippet = video_info['snippet']
                                 yt_channel_id = snippet.get('channelId', '')
                                 
-                                # Хэштеги
                                 if 'description' in snippet:
                                     found_tags = re.findall(r'#([a-zA-Z0-9_가-힣]+)', snippet.get('description', ''))
                                     hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))[:15]
                                 
-                                # Дата
                                 pub_iso = snippet.get('publishedAt', '')
                                 if pub_iso:
                                     published_at = datetime.fromisoformat(pub_iso.replace('Z', '+00:00')).strftime('%d.%m.%Y')
                                 
-                                # Длительность
                                 dur_iso = video_info['contentDetails']['duration']
                                 if dur_iso:
                                     h = int(re.search(r'(\d+)H', dur_iso).group(1)) if re.search(r'(\d+)H', dur_iso) else 0
@@ -1166,7 +1164,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                                 else:
                                     duration = 'LIVE'
                                 
-                                # Поиск канала
                                 if isinstance(channels, list):
                                     for ch in channels:
                                         ch_url = str(ch.get('url', '')).strip()
@@ -1190,7 +1187,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                         failed_details.append(f"{video_id}: Нет API ключа")
                         continue
                     
-                    # Добавляем в пакет
                     batch_data.append({
                         'id': video_id,
                         'title': oembed_data.get('title', 'Без названия'),
@@ -1207,7 +1203,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     failed_total += 1
                     failed_details.append(f"{video_id}: {str(e)[:30]}")
             
-            # Отправляем пакет в Apps Script
             if batch_data:
                 try:
                     result = apps_script_request('batch-pending-videos', 'POST', {'videos': batch_data})
@@ -1219,7 +1214,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     failed_total += len(batch_data)
                     print(f"❌ Ошибка пакетной отправки: {e}")
             
-            # Обновляем прогресс
             progress_pct = int((current_batch / total_batches) * 100)
             bar_len = 20
             filled = int(bar_len * current_batch / total_batches)
@@ -1233,11 +1227,9 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                 f"❌ Ошибок: {failed_total}"
             )
             
-            # Пауза между пакетами, чтобы не превысить квоты API
             if current_batch < total_batches:
                 await asyncio.sleep(1.5)
         
-        # Итоговый отчёт
         report = f"✅ Обработка файла завершена!\n\n"
         report += f"📊 Итоги:\n"
         report += f"• Распознано: {len(video_ids)}\n"
@@ -1258,6 +1250,8 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         await update.message.reply_text(f"❌ Критическая ошибка обработки файла: {str(e)}")
         print(f"❌ Ошибка файла: {e}")
+
+
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
@@ -1279,18 +1273,17 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
     application.add_handler(CommandHandler("fix_playlists", fix_playlists_command))
-    # Обработка файлов со ссылками (ДО текстового хендлера!)
+    # Обработка файлов со ссылками (ПЕРЕД текстовым хендлером!)
     application.add_handler(MessageHandler(
-        filters.Document.ALL & (filters.Document.FILE_EXTENSION("txt") | 
-                                filters.Document.FILE_EXTENSION("csv") | 
-                                filters.Document.FILE_EXTENSION("log")),
+        filters.Document.ALL,
         handle_file_with_links
     ))
     
-    # Обработка ссылок в тексте
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
-    # Обработка ссылок
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
+    # Обработка ссылок в тексте (после файлов)
+    application.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND, 
+        handle_youtube_link
+    ))
     
     print("🤖 Бот запущен...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
