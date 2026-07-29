@@ -2324,54 +2324,20 @@ function openEditModal(videoId) {
     if (!video) return;
     
     editingVideoId = videoId;
-    editingLang = video.original_lang || 'kr';
     
     // Заполняем превью
     document.getElementById('editVideoThumb').src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     
-    // Заполняем поля
+    // Заполняем только редактируемые поля
     document.getElementById('editTitle').value = video.title || '';
-    
-    const origUrl = video.original_lang === 'kr' ? (video.kr_url || '') : (video.en_url || '');
-    document.getElementById('editOriginalUrl').value = origUrl;
     document.getElementById('editRuUrl').value = video.ru_url || '';
-    
-    // Дата
-    let dateDisplay = '';
-    if (video.date) {
-        if (String(video.date).includes('-')) {
-            // YYYY-MM-DD → DD.MM.YYYY
-            const parts = String(video.date).split('-');
-            if (parts.length === 3) {
-                dateDisplay = `${parts[2]}.${parts[1]}.${parts[0]}`;
-            }
-        } else {
-            dateDisplay = String(video.date);
-        }
-    }
-    document.getElementById('editDate').value = dateDisplay;
-    
-    // Длительность
-    document.getElementById('editDuration').value = video.duration || '';
-    
-    // Хэштеги
     document.getElementById('editHashtags').value = video.hashtags || '';
-    
-    // Язык
-    selectLang(editingLang);
     
     // Категория
     const categorySelect = document.getElementById('editCategory');
     categorySelect.innerHTML = categories.map(c => 
         `<option value="${c.name}" ${c.name === video.category ? 'selected' : ''}>${c.name}</option>`
     ).join('');
-    
-    // Канал
-    const channelSelect = document.getElementById('editChannel');
-    channelSelect.innerHTML = '<option value="manual">Неизвестно (manual)</option>' +
-        channels.map(c => 
-            `<option value="${c.id}" ${c.id === video.channel_id ? 'selected' : ''}>${c.name}</option>`
-        ).join('');
     
     // Участники
     const membersContainer = document.getElementById('editMembers');
@@ -2401,66 +2367,28 @@ function openEditModal(videoId) {
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
-function toggleEditMember(tag) {
-    tag.classList.toggle('active');
-}
-
-function closeEditModal() {
-    document.getElementById('editModal').classList.remove('visible');
-    editingVideoId = null;
-}
-
 async function saveEdit() {
     if (!editingVideoId) return;
     
     const video = videos.find(v => v.id === editingVideoId);
     if (!video) return;
     
-    // Собираем данные
+    // Собираем ТОЛЬКО редактируемые поля
     const title = document.getElementById('editTitle').value.trim();
-    const originalUrl = document.getElementById('editOriginalUrl').value.trim();
     const ruUrl = document.getElementById('editRuUrl').value.trim();
-    const dateStr = document.getElementById('editDate').value.trim();
-    const duration = document.getElementById('editDuration').value.trim();
     const hashtags = document.getElementById('editHashtags').value.trim();
     const category = document.getElementById('editCategory').value;
-    const channelId = document.getElementById('editChannel').value;
     
     if (!title) {
         alert('Название не может быть пустым');
         return;
     }
     
-    // Конвертируем дату в ISO формат для таблицы (YYYY-MM-DD)
-    let dateISO = '';
-    if (dateStr) {
-        // DD.MM.YYYY → YYYY-MM-DD
-        const match = dateStr.match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
-        if (match) {
-            dateISO = `${match[3]}-${match[2]}-${match[1]}`;
-        } else {
-            dateISO = dateStr;
-        }
-    }
-    
-    // Обновляем объект видео
+    // Обновляем ТОЛЬКО разрешённые поля, остальные не трогаем
     video.title = title;
-    video.original_lang = editingLang;
-    video.category = category;
-    video.channel_id = channelId;
-    video.date = dateISO;
-    video.duration = duration;
-    video.hashtags = hashtags;
-    
-    // Ссылки в зависимости от языка оригинала
-    if (editingLang === 'kr') {
-        video.kr_url = originalUrl;
-        video.en_url = '';
-    } else {
-        video.kr_url = '';
-        video.en_url = originalUrl;
-    }
     video.ru_url = ruUrl;
+    video.hashtags = hashtags;
+    video.category = category;
     
     // Участники
     const activeTags = document.querySelectorAll('#editMembers .modal-member-tag.active');
@@ -2490,6 +2418,16 @@ async function saveEdit() {
         saveBtn.disabled = false;
     }
 }
+
+function toggleEditMember(tag) {
+    tag.classList.toggle('active');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('visible');
+    editingVideoId = null;
+}
+
 function openAddToPlaylistModal(playlistId) {
     currentPlaylistIdForAdd = playlistId;
     document.getElementById('playlistVideoSearch').value = '';
@@ -2701,7 +2639,7 @@ loadData();
         </div>
     </div>
 </div>
-    <!-- Модальное окно редактирования видео -->
+<!-- Модальное окно редактирования видео -->
 <div class="modal-overlay" id="editModal">
     <div class="modal-content">
         <div class="modal-header">
@@ -2722,54 +2660,16 @@ loadData();
             <input type="text" class="modal-input" id="editTitle">
         </div>
         
-        <!-- Язык оригинала -->
-        <div class="modal-field">
-            <div class="modal-label">Язык оригинала</div>
-            <div class="lang-options" style="display:flex;gap:8px;">
-                <button class="lang-option active" data-lang="kr" onclick="selectLang('kr')" style="flex:1;padding:10px;background:rgba(255,107,0,0.2);border:2px solid var(--orange);border-radius:8px;color:var(--white);font-weight:700;cursor:pointer;">
-                    🇰 Корейский
-                </button>
-                <button class="lang-option" data-lang="en" onclick="selectLang('en')" style="flex:1;padding:10px;background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-weight:700;cursor:pointer;">
-                    🇬🇧 Английский
-                </button>
-            </div>
-        </div>
-        
-        <!-- Ссылка на оригинал -->
-        <div class="modal-field">
-            <div class="modal-label">Ссылка на оригинал</div>
-            <input type="text" class="modal-input" id="editOriginalUrl" placeholder="https://youtube.com/watch?v=...">
-        </div>
-        
         <!-- Ссылка на перевод RU -->
         <div class="modal-field">
             <div class="modal-label">Ссылка на перевод (RU)</div>
             <input type="text" class="modal-input" id="editRuUrl" placeholder="https://youtube.com/watch?v=...">
         </div>
         
-        <!-- Дата -->
-        <div class="modal-field">
-            <div class="modal-label">Дата (dd.mm.yyyy)</div>
-            <input type="text" class="modal-input" id="editDate" placeholder="22.07.2026">
-        </div>
-        
-        <!-- Длительность -->
-        <div class="modal-field">
-            <div class="modal-label">Длительность (mm:ss или hh:mm:ss)</div>
-            <input type="text" class="modal-input" id="editDuration" placeholder="3:30">
-        </div>
-        
         <!-- Категория -->
         <div class="modal-field">
             <div class="modal-label">Категория</div>
             <select class="modal-input" id="editCategory" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:14px;outline:none;">
-            </select>
-        </div>
-        
-        <!-- Канал -->
-        <div class="modal-field">
-            <div class="modal-label">Канал</div>
-            <select class="modal-input" id="editChannel" style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:var(--white);font-size:14px;outline:none;">
             </select>
         </div>
         
