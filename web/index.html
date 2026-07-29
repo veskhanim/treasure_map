@@ -535,7 +535,94 @@
             border: 1px solid rgba(255,107,0,0.3);
         }
         .playlist-preview-thumb img { width: 100%; height: 100%; object-fit: cover; }
-
+        .playlist-detail {
+            padding: 0 12px 12px;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .playlist-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 2px solid rgba(255,107,0,0.3);
+            margin-bottom: 12px;
+        }
+        
+        .back-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255,107,0,0.2);
+            border: 2px solid rgba(255,107,0,0.5);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .back-btn:active {
+            background: rgba(255,107,0,0.4);
+        }
+        
+        .back-btn .icon {
+            width: 18px;
+            height: 18px;
+            color: var(--orange);
+        }
+        
+        .playlist-detail-title {
+            flex: 1;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--white);
+        }
+        
+        .playlist-detail-count {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        
+        .playlist-detail-actions {
+            display: flex;
+            gap: 6px;
+        }
+        
+        .playlist-detail-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .playlist-detail-btn.add {
+            background: rgba(76,175,80,0.2);
+            border: 1px solid rgba(76,175,80,0.5);
+        }
+        
+        .playlist-detail-btn.add .icon {
+            color: #4CAF50;
+        }
+        
+        .playlist-detail-btn.delete {
+            background: rgba(234,67,53,0.2);
+            border: 1px solid rgba(234,67,53,0.5);
+        }
+        
+        .playlist-detail-btn.delete .icon {
+            color: #ea4335;
+        }
+        
+        .playlist-detail-btn:active {
+            transform: scale(0.95);
+        }
         .team-filters {
             padding: 10px 12px;
             background: rgba(0,0,0,0.2);
@@ -1212,19 +1299,40 @@
     </div>
 
     <div class="tab-content" id="tab-playlists">
-        <div class="playlists-container" id="playlistsContainer">
-            <button class="add-playlist-btn" onclick="openAddPlaylistModal()">
-                <svg class="icon"><use href="#i-plus"/></svg>
-                Создать плейлист
-            </button>
-            <div id="playlistsList"></div>
+        <!-- Список плейлистов -->
+        <div id="playlistsContainer">
+            <div class="playlists-container">
+                <button class="add-playlist-btn" onclick="openAddPlaylistModal()">
+                    <svg class="icon"><use href="#i-plus"/></svg>
+                    Создать плейлист
+                </button>
+                <div id="playlistsList"></div>
+            </div>
         </div>
+        
+        <!-- Детальный просмотр плейлиста -->
         <div class="playlist-detail" id="playlistDetail" style="display:none">
             <div class="playlist-detail-header">
-                <button class="back-btn" onclick="closePlaylistDetail()"><svg class="icon"><use href="#i-back"/></svg></button>
-                <div class="playlist-detail-title" id="playlistDetailTitle"></div>
+                <button class="back-btn" onclick="closePlaylistDetail()">
+                    <svg class="icon"><use href="#i-back"/></svg>
+                </button>
+                <div style="flex:1;min-width:0;">
+                    <div class="playlist-detail-title" id="playlistDetailTitle"></div>
+                    <div class="playlist-detail-count" id="playlistDetailCount"></div>
+                </div>
+                <div class="playlist-detail-actions">
+                    <button class="playlist-detail-btn add" onclick="openAddToPlaylistModal(currentPlaylistIdForAdd)" title="Добавить видео">
+                        <svg class="icon"><use href="#i-plus"/></svg>
+                    </button>
+                    <button class="playlist-detail-btn delete" onclick="deletePlaylist(currentPlaylistIdForAdd)" title="Удалить плейлист">
+                        <svg class="icon"><use href="#i-trash"/></svg>
+                    </button>
+                </div>
             </div>
             <div class="video-list" id="playlistVideosList"></div>
+            <div class="empty-state" id="playlistEmptyState">
+                <div class="empty-state-text">ПЛЕЙЛИСТ ПУСТ</div>
+            </div>
         </div>
     </div>
 
@@ -1587,14 +1695,14 @@ function renderPlaylists() {
         }).join('');
         
         const typeBadge = playlist.type === 'dynamic' 
-            ? '<span style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.5);color:#4CAF50;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">АВТО</span>'
-            : '<span style="background:rgba(255,107,0,0.2);border:1px solid rgba(255,107,0,0.5);color:var(--orange);padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">РУЧНОЙ</span>';
+            ? '<span style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.5);color:#4CAF50;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;margin-left:6px;">АВТО</span>'
+            : '<span style="background:rgba(255,107,0,0.2);border:1px solid rgba(255,107,0,0.5);color:var(--orange);padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;margin-left:6px;">РУЧНОЙ</span>';
         
         return `
-            <div class="playlist-card">
-                <div class="playlist-card-header">
-                    <div>
-                        <div class="playlist-name">${playlist.name} ${typeBadge}</div>
+            <div class="playlist-card" onclick="openPlaylistDetail('${playlist.id}')" style="cursor:pointer;">
+                <div class="playlist-card-header" onclick="event.stopPropagation();">
+                    <div style="flex:1;">
+                        <div class="playlist-name">${playlist.name}${typeBadge}</div>
                         <div class="playlist-count">${playlist.video_ids.length} видео</div>
                     </div>
                     <div style="display:flex;gap:4px;">
@@ -1610,6 +1718,63 @@ function renderPlaylists() {
             </div>
         `;
     }).join('');
+}
+
+let currentPlaylistIdForAdd = null;
+
+function openPlaylistDetail(playlistId) {
+    const playlist = playlists.find(p => p.id === playlistId);
+    if (!playlist) return;
+    
+    currentPlaylistIdForAdd = playlistId;
+    
+    // Скрываем список плейлистов, показываем детальный вид
+    document.getElementById('playlistsContainer').style.display = 'none';
+    document.getElementById('playlistDetail').style.display = 'block';
+    
+    // Заполняем заголовок
+    document.getElementById('playlistDetailTitle').textContent = playlist.name;
+    document.getElementById('playlistDetailCount').textContent = `${playlist.video_ids.length} видео`;
+    
+    // Рендерим видео плейлиста
+    renderPlaylistVideos(playlist);
+    
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
+function closePlaylistDetail() {
+    document.getElementById('playlistDetail').style.display = 'none';
+    document.getElementById('playlistsContainer').style.display = 'block';
+    currentPlaylistIdForAdd = null;
+    
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
+function renderPlaylistVideos(playlist) {
+    const container = document.getElementById('playlistVideosList');
+    const emptyState = document.getElementById('playlistEmptyState');
+    
+    if (!container) return;
+    
+    // Фильтруем видео по ID из плейлиста
+    const playlistVideos = playlist.video_ids
+        .map(vid => videos.find(v => v.id === vid))
+        .filter(v => v);
+    
+    if (playlistVideos.length === 0) {
+        container.innerHTML = '';
+        emptyState.classList.add('visible');
+        return;
+    }
+    
+    emptyState.classList.remove('visible');
+    
+    // Рендерим каждое видео в формате карточки (как на вкладке Карта)
+    container.innerHTML = playlistVideos.map(video => `
+        <div class="video-card">
+            ${renderVideoCard(video)}
+        </div>
+    `).join('');
 }
 
 function renderTeamChannels() {
@@ -1778,6 +1943,10 @@ async function deletePlaylist(playlistId) {
     
     await apiRequest('playlists', 'DELETE', null, { id: playlistId });
     await loadData();
+    
+    // Закрываем детальный вид если он открыт
+    closePlaylistDetail();
+    
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 let approveLang = 'kr';
@@ -2174,12 +2343,19 @@ async function addVideoToPlaylist(videoId) {
         }
         
         await loadData();
+        
+        // Если открыт детальный вид плейлиста - обновляем его
+        const playlist = playlists.find(p => p.id === currentPlaylistIdForAdd);
+        if (playlist && document.getElementById('playlistDetail').style.display !== 'none') {
+            renderPlaylistVideos(playlist);
+            document.getElementById('playlistDetailCount').textContent = `${playlist.video_ids.length} видео`;
+        }
+        
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } catch (error) {
         alert('Ошибка при добавлении: ' + error.message);
     }
 }
-
 document.getElementById('calendarBtn').addEventListener('click', function(e) {
     e.stopPropagation();
     document.getElementById('calendarDropdown').classList.toggle('visible');
