@@ -1205,7 +1205,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     
                 except Exception as e:
                     failed_total += 1
-                    failed_details.append(f"https://youtu.be/{video_id} — {str(e)[:30]}")
+                    failed_details.append(f"https://youtu.be/{video_id}")
             
             if batch_data:
                 try:
@@ -1244,7 +1244,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         report += f"• Нераспознанных строк: {unrecognized_count}\n"
         
         if failed_details:
-            report += f"\n❌ Примеры ошибок:\n"
+            report += f"\n❌:\n"
             for fail in failed_details:
                 report += f"• {fail}\n"
         
