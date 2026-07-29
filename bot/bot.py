@@ -566,26 +566,26 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                         snippet = video_info['snippet']
                         yt_channel_id = snippet.get('channelId', '')
                         
-                        # ← ИЗВЛЕКАЕМ ХЭШТЕГИ
-                        if 'tags' in snippet:
-                            # YouTube API возвращает теги как список (без #)
-                            api_tags = snippet.get('tags', [])
-                            # Добавляем # к каждому тегу если его нет
-                            hashtags = [tag if tag.startswith('#') else f'#{tag}' for tag in api_tags]
-                        
-                        # Если тегов нет в API, парсим из описания
-                        if not hashtags and 'description' in snippet:
+                        hashtags = []
+                        # Берем хэштеги ТОЛЬКО из описания видео
+                        if 'description' in snippet:
                             description = snippet.get('description', '')
-                            # Находим все хэштеги (включая корейские символы)
-                            # \w+ не ловит корейский, поэтому используем [^\s]+
+                            
+                            # Регулярное выражение ищет #, за которым следуют:
+                            # a-zA-Z0-9_ (латиница, цифры, подчеркивание)
+                            # г-힣 (весь корейский алфавит Hangul)
                             hashtag_pattern = r'#([a-zA-Z0-9_가-힣]+)'
-                            found_hashtags = re.findall(hashtag_pattern, description)
-                            # Добавляем # обратно
-                            hashtags = [f'#{tag}' for tag in found_hashtags]
+                            found_tags = re.findall(hashtag_pattern, description)
+                            
+                            # Добавляем решетку обратно и убираем дубликаты
+                            hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))
+                            
+                            # Ограничиваем до 15 хэштегов, чтобы не засорять таблицу, если в описании спам
+                            hashtags = hashtags[:15]
                         
-                        print(f"️ Найдено хэштегов для {video_id}: {len(hashtags)}")
+                        print(f"✅ Найдено хэштегов в описании для {video_id}: {len(hashtags)}")
                         if hashtags:
-                            print(f"   Хэштеги: {', '.join(hashtags[:5])}")  # Показываем первые 5
+                            print(f"   Хэштеги: {', '.join(hashtags)}")
                         
                         # Дата
                         published_at_iso = snippet.get('publishedAt', '')
