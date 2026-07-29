@@ -1000,7 +1000,264 @@ async def fix_playlists_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
         print(f"❌ Ошибка fix_playlists: {e}")
+
+import asyncio
+from telegram import Update
+from telegram.ext import ContextTypes, MessageHandler, filters
+
+async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка файла со списком YouTube ссылок (поддержка тысяч ссылок)"""
+    
+    # Получаем файл
+    file = None
+    if update.message.document:
+        # Проверяем расширение (разрешаем txt, csv, log)
+        file_name = update.message.document.file_name or ""
+        if not file_name.lower().endswith(('.txt', '.csv', '.log')):
+            await update.message.reply_text("❌ Поддерживаются только файлы .txt, .csv или .log")
+            return
+        file = await update.message.document.get_file()
+    else:
+        return
+    
+    # Проверка размера (макс 2 МБ, этого хватит на ~50 000 ссылок)
+    if file.file_size > 2 * 1024 * 1024:
+        await update.message.reply_text("❌ Файл слишком большой. Максимальный размер: 2 МБ")
+        return
+    
+    try:
+        status_msg = await update.message.reply_text("📥 Скачиваю и читаю файл...")
         
+        # Скачиваем и читаем
+        file_bytes = await file.download_as_bytearray()
+        file_text = file_bytes.decode('utf-8', errors='ignore')
+        
+        # Извлекаем ссылки
+        youtube_patterns = [
+            r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/live/)([0-9A-Za-z_-]{11})',
+            r'^([0-9A-Za-z_-]{11})$',
+        ]
+        
+        lines = [line.strip() for line in file_text.split('\n') if line.strip()]
+        video_ids = []
+        unrecognized_count = 0
+        
+        for line in lines:
+            found = False
+            for pattern in youtube_patterns[:-1]:
+                if re.search(pattern, line):
+                    match = re.search(pattern, line)
+                    video_ids.append(match.group(1))
+                    found = True
+                    break
+            
+            if not found and re.match(youtube_patterns[-1], line):
+                video_ids.append(line)
+                found = True
+            
+            if not found:
+                unrecognized_count += 1
+        
+        video_ids = list(set(video_ids))  # Убираем дубликаты
+        
+        if not video_ids:
+            await status_msg.edit_text("❌ В файле не найдено ни одной корректной ссылки YouTube.")
+            return
+            
+        if len(video_ids) > 3000:
+            await status_msg.edit_text("⚠️ Слишком много ссылок (>3000). Разбейте файл на части, чтобы избежать лимитов API.")
+            return
+
+        await status_msg.edit_text(f"🔍 Найдено уникальных ссылок: {len(video_ids)}\nПроверяю существующие...")
+        
+        # Проверяем существующие
+        videos = apps_script_request('videos', 'GET')
+        pending = apps_script_request('pending-videos', 'GET')
+        
+        existing_video_ids = set()
+        if isinstance(videos, list):
+            existing_video_ids.update([str(v.get('id', '')) for v in videos])
+        if isinstance(pending, list):
+            existing_video_ids.update([str(p.get('id', '')) for p in pending])
+        
+        new_video_ids = [vid for vid in video_ids if vid not in existing_video_ids]
+        already_exist_count = len(video_ids) - len(new_video_ids)
+        
+        if not new_video_ids:
+            await status_msg.edit_text(f"✅ Все {len(video_ids)} видео из файла уже есть в таблицах.")
+            return
+        
+        await status_msg.edit_text(
+            f"📊 Статистика файла:\n"
+            f"• Всего строк: {len(lines)}\n"
+            f"• Распознано: {len(video_ids)}\n"
+            f"• Уже в таблицах: {already_exist_count}\n"
+            f"• Будет обработано: {len(new_video_ids)}\n"
+            f"• Нераспознано: {unrecognized_count}\n\n"
+            f"🔄 Начинаю пакетную обработку..."
+        )
+        
+        # Получаем каналы один раз
+        channels = apps_script_request('channels', 'GET')
+        
+        batch_size = 20  # Обрабатываем по 20 видео за один запрос к Apps Script
+        total_batches = (len(new_video_ids) + batch_size - 1) // batch_size
+        current_batch = 0
+        added_total = 0
+        failed_total = 0
+        failed_details = []
+        
+        for i in range(0, len(new_video_ids), batch_size):
+            current_batch += 1
+            batch_ids = new_video_ids[i:i + batch_size]
+            batch_data = []
+            
+            for video_id in batch_ids:
+                try:
+                    # 1. oEmbed
+                    oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
+                    oembed_response = requests.get(oembed_url, timeout=10)
+                    
+                    if oembed_response.status_code != 200:
+                        failed_total += 1
+                        failed_details.append(f"{video_id}: Нет доступа")
+                        continue
+                    
+                    oembed_data = oembed_response.json()
+                    channel_id = 'manual'
+                    channel_name = oembed_data.get('author_name', 'Неизвестно')
+                    duration = ''
+                    published_at = ''
+                    hashtags = []
+                    
+                    # 2. YouTube API
+                    if YOUTUBE_API_KEY:
+                        try:
+                            api_url = f'https://www.googleapis.com/youtube/v3/videos'
+                            api_response = requests.get(
+                                api_url,
+                                params={'part': 'snippet,contentDetails,liveStreamingDetails', 'id': video_id, 'key': YOUTUBE_API_KEY},
+                                timeout=10
+                            )
+                            api_data = api_response.json()
+                            
+                            if api_data.get('items'):
+                                video_info = api_data['items'][0]
+                                snippet = video_info['snippet']
+                                yt_channel_id = snippet.get('channelId', '')
+                                
+                                # Хэштеги
+                                if 'description' in snippet:
+                                    found_tags = re.findall(r'#([a-zA-Z0-9_가-힣]+)', snippet.get('description', ''))
+                                    hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))[:15]
+                                
+                                # Дата
+                                pub_iso = snippet.get('publishedAt', '')
+                                if pub_iso:
+                                    published_at = datetime.fromisoformat(pub_iso.replace('Z', '+00:00')).strftime('%d.%m.%Y')
+                                
+                                # Длительность
+                                dur_iso = video_info['contentDetails']['duration']
+                                if dur_iso:
+                                    h = int(re.search(r'(\d+)H', dur_iso).group(1)) if re.search(r'(\d+)H', dur_iso) else 0
+                                    m = int(re.search(r'(\d+)M', dur_iso).group(1)) if re.search(r'(\d+)M', dur_iso) else 0
+                                    s = int(re.search(r'(\d+)S', dur_iso).group(1)) if re.search(r'(\d+)S', dur_iso) else 0
+                                    duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+                                else:
+                                    duration = 'LIVE'
+                                
+                                # Поиск канала
+                                if isinstance(channels, list):
+                                    for ch in channels:
+                                        ch_url = str(ch.get('url', '')).strip()
+                                        if ch_url == yt_channel_id or f'youtube.com/channel/{yt_channel_id}' in ch_url:
+                                            channel_id = ch.get('id', 'manual')
+                                            channel_name = ch.get('name', channel_name)
+                                            break
+                                    if channel_id == 'manual':
+                                        oembed_name_lower = channel_name.lower().strip()
+                                        for ch in channels:
+                                            if str(ch.get('name', '')).lower().strip() in oembed_name_lower or oembed_name_lower in str(ch.get('name', '')).lower().strip():
+                                                channel_id = ch.get('id', 'manual')
+                                                channel_name = ch.get('name', channel_name)
+                                                break
+                        except Exception as e:
+                            failed_total += 1
+                            failed_details.append(f"{video_id}: API ошибка")
+                            continue
+                    else:
+                        failed_total += 1
+                        failed_details.append(f"{video_id}: Нет API ключа")
+                        continue
+                    
+                    # Добавляем в пакет
+                    batch_data.append({
+                        'id': video_id,
+                        'title': oembed_data.get('title', 'Без названия'),
+                        'channel_id': channel_id,
+                        'channel_name': channel_name,
+                        'published_at': published_at,
+                        'duration': duration,
+                        'hashtags': ','.join(hashtags),
+                        'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
+                        'video_url': f'https://youtube.com/watch?v={video_id}'
+                    })
+                    
+                except Exception as e:
+                    failed_total += 1
+                    failed_details.append(f"{video_id}: {str(e)[:30]}")
+            
+            # Отправляем пакет в Apps Script
+            if batch_data:
+                try:
+                    result = apps_script_request('batch-pending-videos', 'POST', {'videos': batch_data})
+                    if isinstance(result, dict) and result.get('success'):
+                        added_total += result.get('added', len(batch_data))
+                    else:
+                        failed_total += len(batch_data)
+                except Exception as e:
+                    failed_total += len(batch_data)
+                    print(f"❌ Ошибка пакетной отправки: {e}")
+            
+            # Обновляем прогресс
+            progress_pct = int((current_batch / total_batches) * 100)
+            bar_len = 20
+            filled = int(bar_len * current_batch / total_batches)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            
+            await status_msg.edit_text(
+                f"🔄 Обработка: {progress_pct}%\n"
+                f"[{bar}]\n"
+                f"Пакет {current_batch}/{total_batches}\n"
+                f"✅ Добавлено: {added_total}\n"
+                f"❌ Ошибок: {failed_total}"
+            )
+            
+            # Пауза между пакетами, чтобы не превысить квоты API
+            if current_batch < total_batches:
+                await asyncio.sleep(1.5)
+        
+        # Итоговый отчёт
+        report = f"✅ Обработка файла завершена!\n\n"
+        report += f"📊 Итоги:\n"
+        report += f"• Распознано: {len(video_ids)}\n"
+        report += f"• Уже было: {already_exist_count}\n"
+        report += f"• Успешно добавлено: {added_total}\n"
+        report += f"• Ошибок: {failed_total}\n"
+        report += f"• Нераспознанных строк: {unrecognized_count}\n"
+        
+        if failed_details:
+            report += f"\n❌ Примеры ошибок (первые 10):\n"
+            for fail in failed_details[:10]:
+                report += f"• {fail}\n"
+            if len(failed_details) > 10:
+                report += f"... и ещё {len(failed_details) - 10}\n"
+        
+        await status_msg.edit_text(report)
+        
+    except Exception as e:
+        await update.message.reply_text(f"❌ Критическая ошибка обработки файла: {str(e)}")
+        print(f"❌ Ошибка файла: {e}")
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
@@ -1022,7 +1279,16 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
     application.add_handler(CommandHandler("fix_playlists", fix_playlists_command))
+    # Обработка файлов со ссылками (ДО текстового хендлера!)
+    application.add_handler(MessageHandler(
+        filters.Document.ALL & (filters.Document.FILE_EXTENSION("txt") | 
+                                filters.Document.FILE_EXTENSION("csv") | 
+                                filters.Document.FILE_EXTENSION("log")),
+        handle_file_with_links
+    ))
     
+    # Обработка ссылок в тексте
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
     # Обработка ссылок
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
     
