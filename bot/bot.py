@@ -699,6 +699,194 @@ def check_access(telegram_id: int) -> bool:
     except Exception as e:
         print(f"❌ Ошибка парсинга JSON при проверке доступа: {e}")
         return False
+
+async def fix_hashtags_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Временная команда: извлекает хэштеги для всех существующих видео"""
+    
+    # Проверка доступа (только для администратора)
+    if not check_access(update.effective_user.id):
+        return
+    
+    await update.message.reply_text(
+        "⚠️ ВНИМАНИЕ: Это временная функция!\n\n"
+        "Сейчас я пройдусь по всем видео в таблицах Videos и PendingVideos,\n"
+        "извлеку хэштеги из описания и обновлю колонку hashtags.\n\n"
+        "Это может занять несколько минут. Начать?"
+    )
+    
+    status_msg = await update.message.reply_text("🔄 Начинаю обработку...")
+    
+    try:
+        # Получаем все видео из обеих таблиц
+        videos = apps_script_request('videos', 'GET')
+        pending = apps_script_request('pending-videos', 'GET')
+        
+        if not isinstance(videos, list):
+            videos = []
+        if not isinstance(pending, list):
+            pending = []
+        
+        total = len(videos) + len(pending)
+        if total == 0:
+            await status_msg.edit_text("Нет видео для обработки")
+            return
+        
+        await status_msg.edit_text(
+            f"📊 Найдено видео:\n"
+            f"• Videos: {len(videos)}\n"
+            f"• Pending: {len(pending)}\n"
+            f"• Всего: {total}\n\n"
+            f"🔄 Начинаю обработку..."
+        )
+        
+        updated_count = 0
+        skipped_count = 0
+        failed_count = 0
+        failed_ids = []
+        
+        # Обрабатываем Videos
+        for i, video in enumerate(videos, 1):
+            video_id = str(video.get('id', ''))
+            if not video_id:
+                continue
+            
+            try:
+                hashtags = await extract_hashtags_from_youtube(video_id)
+                
+                if hashtags is not None:
+                    result = apps_script_request('update-hashtags', 'PUT', {
+                        'sheet_name': 'Videos',
+                        'id': video_id,
+                        'hashtags': hashtags
+                    })
+                    
+                    if isinstance(result, dict) and result.get('success'):
+                        updated_count += 1
+                    else:
+                        failed_count += 1
+                        failed_ids.append(f"V:{video_id}")
+                else:
+                    skipped_count += 1
+                
+                # Обновляем прогресс каждые 5 видео
+                if i % 5 == 0 or i == len(videos):
+                    await status_msg.edit_text(
+                        f"🔄 Обработка Videos: {i}/{len(videos)}\n"
+                        f"✅ Обновлено: {updated_count}\n"
+                        f"⏭️ Пропущено: {skipped_count}\n"
+                        f"❌ Ошибок: {failed_count}"
+                    )
+                
+            except Exception as e:
+                failed_count += 1
+                failed_ids.append(f"V:{video_id}:{str(e)[:20]}")
+                print(f"❌ Ошибка для Videos {video_id}: {e}")
+        
+        # Обрабатываем PendingVideos
+        for i, video in enumerate(pending, 1):
+            video_id = str(video.get('id', ''))
+            if not video_id:
+                continue
+            
+            try:
+                hashtags = await extract_hashtags_from_youtube(video_id)
+                
+                if hashtags is not None:
+                    result = apps_script_request('update-hashtags', 'PUT', {
+                        'sheet_name': 'PendingVideos',
+                        'id': video_id,
+                        'hashtags': hashtags
+                    })
+                    
+                    if isinstance(result, dict) and result.get('success'):
+                        updated_count += 1
+                    else:
+                        failed_count += 1
+                        failed_ids.append(f"P:{video_id}")
+                else:
+                    skipped_count += 1
+                
+                # Обновляем прогресс
+                progress = len(videos) + i
+                if i % 5 == 0 or i == len(pending):
+                    await status_msg.edit_text(
+                        f"🔄 Обработка Pending: {i}/{len(pending)}\n"
+                        f"✅ Обновлено: {updated_count}\n"
+                        f"⏭️ Пропущено: {skipped_count}\n"
+                        f"❌ Ошибок: {failed_count}"
+                    )
+                
+            except Exception as e:
+                failed_count += 1
+                failed_ids.append(f"P:{video_id}:{str(e)[:20]}")
+                print(f"❌ Ошибка для Pending {video_id}: {e}")
+        
+        # Итоговый отчёт
+        report = f"✅ Обработка завершена!\n\n"
+        report += f"📊 Статистика:\n"
+        report += f"• Всего видео: {total}\n"
+        report += f"• Обновлено: {updated_count}\n"
+        report += f"• Пропущено (нет описания): {skipped_count}\n"
+        report += f"• Ошибок: {failed_count}\n"
+        
+        if failed_ids:
+            report += f"\n Ошибки (первые 10):\n"
+            for fail in failed_ids[:10]:
+                report += f"• {fail}\n"
+            if len(failed_ids) > 10:
+                report += f"... и ещё {len(failed_ids) - 10}\n"
+        
+        report += f"\n⚠️ Не забудь удалить функцию fix_hashtags_command из кода!"
+        
+        await status_msg.edit_text(report)
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
+        print(f"❌ Критическая ошибка fix_hashtags: {e}")
+
+
+async def extract_hashtags_from_youtube(video_id: str) -> str:
+    """Извлекает хэштеги из описания видео YouTube. Возвращает строку или None."""
+    try:
+        if not YOUTUBE_API_KEY:
+            return None
+        
+        api_url = f'https://www.googleapis.com/youtube/v3/videos'
+        api_response = requests.get(
+            api_url,
+            params={
+                'part': 'snippet',
+                'id': video_id,
+                'key': YOUTUBE_API_KEY
+            },
+            timeout=10
+        )
+        api_data = api_response.json()
+        
+        if not api_data.get('items'):
+            return None
+        
+        snippet = api_data['items'][0].get('snippet', {})
+        description = snippet.get('description', '')
+        
+        if not description:
+            return None
+        
+        # Ищем хэштеги (включая корейские символы)
+        hashtag_pattern = r'#([a-zA-Z0-9_가-힣]+)'
+        found_tags = re.findall(hashtag_pattern, description)
+        
+        if not found_tags:
+            return None
+        
+        # Убираем дубликаты, добавляем #, ограничиваем до 15
+        hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))[:15]
+        
+        return ','.join(hashtags)
+        
+    except Exception as e:
+        print(f"⚠️ Ошибка извлечения хэштегов для {video_id}: {e}")
+        return None
         
 # ===== ЗАПУСК =====
 def main():
@@ -719,6 +907,7 @@ def main():
     application.add_handler(CommandHandler("categories", categories_command))
     application.add_handler(CommandHandler("addcat", add_category_command))
     application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
     
     # Обработка ссылок
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
