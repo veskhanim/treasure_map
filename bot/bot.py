@@ -1016,7 +1016,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         file_ext = file_name.lower().split('.')[-1] if '.' in file_name else ''
         
         if file_ext not in ('txt', 'csv', 'log'):
-            # Если файл не txt/csv/log - пропускаем, пусть обработает текст
             return
         
         file = await update.message.document.get_file()
@@ -1122,7 +1121,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     
                     if oembed_response.status_code != 200:
                         failed_total += 1
-                        failed_details.append(f"{video_id}: Нет доступа")
+                        failed_details.append(f"https://youtu.be/{video_id} — Нет доступа (удалено/приватное)")
                         continue
                     
                     oembed_data = oembed_response.json()
@@ -1142,49 +1141,54 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                             )
                             api_data = api_response.json()
                             
-                            if api_data.get('items'):
-                                video_info = api_data['items'][0]
-                                snippet = video_info['snippet']
-                                yt_channel_id = snippet.get('channelId', '')
-                                
-                                if 'description' in snippet:
-                                    found_tags = re.findall(r'#([a-zA-Z0-9_가-힣]+)', snippet.get('description', ''))
-                                    hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))[:15]
-                                
-                                pub_iso = snippet.get('publishedAt', '')
-                                if pub_iso:
-                                    published_at = datetime.fromisoformat(pub_iso.replace('Z', '+00:00')).strftime('%d.%m.%Y')
-                                
-                                dur_iso = video_info['contentDetails']['duration']
-                                if dur_iso:
-                                    h = int(re.search(r'(\d+)H', dur_iso).group(1)) if re.search(r'(\d+)H', dur_iso) else 0
-                                    m = int(re.search(r'(\d+)M', dur_iso).group(1)) if re.search(r'(\d+)M', dur_iso) else 0
-                                    s = int(re.search(r'(\d+)S', dur_iso).group(1)) if re.search(r'(\d+)S', dur_iso) else 0
-                                    duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
-                                else:
-                                    duration = 'LIVE'
-                                
-                                if isinstance(channels, list):
+                            if not api_data.get('items'):
+                                failed_total += 1
+                                failed_details.append(f"https://youtu.be/{video_id} — Видео не найдено в API")
+                                continue
+                            
+                            video_info = api_data['items'][0]
+                            snippet = video_info['snippet']
+                            yt_channel_id = snippet.get('channelId', '')
+                            
+                            if 'description' in snippet:
+                                found_tags = re.findall(r'#([a-zA-Z0-9_가-힣]+)', snippet.get('description', ''))
+                                hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))[:15]
+                            
+                            pub_iso = snippet.get('publishedAt', '')
+                            if pub_iso:
+                                published_at = datetime.fromisoformat(pub_iso.replace('Z', '+00:00')).strftime('%d.%m.%Y')
+                            
+                            dur_iso = video_info['contentDetails']['duration']
+                            if dur_iso:
+                                h = int(re.search(r'(\d+)H', dur_iso).group(1)) if re.search(r'(\d+)H', dur_iso) else 0
+                                m = int(re.search(r'(\d+)M', dur_iso).group(1)) if re.search(r'(\d+)M', dur_iso) else 0
+                                s = int(re.search(r'(\d+)S', dur_iso).group(1)) if re.search(r'(\d+)S', dur_iso) else 0
+                                duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+                            else:
+                                duration = 'LIVE'
+                            
+                            if isinstance(channels, list):
+                                for ch in channels:
+                                    ch_url = str(ch.get('url', '')).strip()
+                                    if ch_url == yt_channel_id or f'youtube.com/channel/{yt_channel_id}' in ch_url:
+                                        channel_id = ch.get('id', 'manual')
+                                        channel_name = ch.get('name', channel_name)
+                                        break
+                                if channel_id == 'manual':
+                                    oembed_name_lower = channel_name.lower().strip()
                                     for ch in channels:
-                                        ch_url = str(ch.get('url', '')).strip()
-                                        if ch_url == yt_channel_id or f'youtube.com/channel/{yt_channel_id}' in ch_url:
+                                        db_name = str(ch.get('name', '')).lower().strip()
+                                        if db_name == oembed_name_lower or db_name in oembed_name_lower or oembed_name_lower in db_name:
                                             channel_id = ch.get('id', 'manual')
                                             channel_name = ch.get('name', channel_name)
                                             break
-                                    if channel_id == 'manual':
-                                        oembed_name_lower = channel_name.lower().strip()
-                                        for ch in channels:
-                                            if str(ch.get('name', '')).lower().strip() in oembed_name_lower or oembed_name_lower in str(ch.get('name', '')).lower().strip():
-                                                channel_id = ch.get('id', 'manual')
-                                                channel_name = ch.get('name', channel_name)
-                                                break
                         except Exception as e:
                             failed_total += 1
-                            failed_details.append(f"{video_id}: API ошибка")
+                            failed_details.append(f"https://youtu.be/{video_id} — Ошибка API")
                             continue
                     else:
                         failed_total += 1
-                        failed_details.append(f"{video_id}: Нет API ключа")
+                        failed_details.append(f"https://youtu.be/{video_id} — Не указан YouTube API ключ")
                         continue
                     
                     batch_data.append({
@@ -1201,7 +1205,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     
                 except Exception as e:
                     failed_total += 1
-                    failed_details.append(f"{video_id}: {str(e)[:30]}")
+                    failed_details.append(f"https://youtu.be/{video_id} — {str(e)[:30]}")
             
             if batch_data:
                 try:
@@ -1230,8 +1234,9 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
             if current_batch < total_batches:
                 await asyncio.sleep(1.5)
         
+        # Итоговый отчёт
         report = f"✅ Обработка файла завершена!\n\n"
-        report += f"📊 Итоги:\n"
+        report += f" Итоги:\n"
         report += f"• Распознано: {len(video_ids)}\n"
         report += f"• Уже было: {already_exist_count}\n"
         report += f"• Успешно добавлено: {added_total}\n"
