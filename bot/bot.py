@@ -510,9 +510,12 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         existing_video_ids.update([str(p.get('id', '')) for p in pending])
     
     new_video_ids = [vid for vid in video_ids if vid not in existing_video_ids]
+    already_exist_count = len(video_ids) - len(new_video_ids)
     
     if not new_video_ids:
-        await update.message.reply_text('⚠️ Все эти видео уже есть в таблице')
+        await update.message.reply_text(
+            f"⚠️ Все {len(video_ids)} видео уже есть в таблице."
+        )
         return
     
     # Отправляем сообщение о начале обработки
@@ -523,7 +526,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     added_count = 0
     failed_count = 0
-    failed_videos = []
+    failed_details = []  # ← Список деталей ошибок
     
     # Получаем список каналов один раз
     channels = apps_script_request('channels', 'GET')
@@ -536,7 +539,11 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             
             if oembed_response.status_code != 200:
                 failed_count += 1
-                failed_videos.append(f"{video_id}: нет доступа")
+                failed_details.append({
+                    'id': video_id,
+                    'reason': 'Нет доступа к видео (удалено или приватное)',
+                    'url': f'https://youtube.com/watch?v={video_id}'
+                })
                 continue
             
             oembed_data = oembed_response.json()
@@ -544,7 +551,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             channel_name = oembed_data.get('author_name', 'Неизвестно')
             duration = ''
             published_at = ''
-            hashtags = []  # ← ХЭШТЕГИ
+            hashtags = []
             
             # 2. YouTube API
             if YOUTUBE_API_KEY:
@@ -561,69 +568,77 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     )
                     api_data = api_response.json()
                     
-                    if api_data.get('items'):
-                        video_info = api_data['items'][0]
-                        snippet = video_info['snippet']
-                        yt_channel_id = snippet.get('channelId', '')
+                    if not api_data.get('items'):
+                        failed_count += 1
+                        failed_details.append({
+                            'id': video_id,
+                            'reason': 'Видео не найдено в API',
+                            'url': f'https://youtube.com/watch?v={video_id}'
+                        })
+                        continue
+                    
+                    video_info = api_data['items'][0]
+                    snippet = video_info['snippet']
+                    yt_channel_id = snippet.get('channelId', '')
+                    
+                    # Извлекаем хэштеги
+                    if 'description' in snippet:
+                        description = snippet.get('description', '')
+                        hashtag_pattern = r'#([a-zA-Z0-9_가-힣]+)'
+                        found_tags = re.findall(hashtag_pattern, description)
+                        hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))[:15]
+                    
+                    # Дата
+                    published_at_iso = snippet.get('publishedAt', '')
+                    if published_at_iso:
+                        pub_date = datetime.fromisoformat(published_at_iso.replace('Z', '+00:00'))
+                        published_at = pub_date.strftime('%d.%m.%Y')
+                    
+                    # Длительность
+                    duration_iso = video_info['contentDetails']['duration']
+                    hours = re.search(r'(\d+)H', duration_iso)
+                    minutes = re.search(r'(\d+)M', duration_iso)
+                    seconds = re.search(r'(\d+)S', duration_iso)
+                    
+                    h = int(hours.group(1)) if hours else 0
+                    m = int(minutes.group(1)) if minutes else 0
+                    s = int(seconds.group(1)) if seconds else 0
+                    duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+                    
+                    # Поиск канала
+                    if isinstance(channels, list):
+                        for ch in channels:
+                            ch_url = str(ch.get('url', '')).strip()
+                            if ch_url == yt_channel_id or f'youtube.com/channel/{yt_channel_id}' in ch_url:
+                                channel_id = ch.get('id', 'manual')
+                                channel_name = ch.get('name', channel_name)
+                                break
                         
-                        hashtags = []
-                        # Берем хэштеги ТОЛЬКО из описания видео
-                        if 'description' in snippet:
-                            description = snippet.get('description', '')
-                            
-                            # Регулярное выражение ищет #, за которым следуют:
-                            # a-zA-Z0-9_ (латиница, цифры, подчеркивание)
-                            # г-힣 (весь корейский алфавит Hangul)
-                            hashtag_pattern = r'#([a-zA-Z0-9_가-힣]+)'
-                            found_tags = re.findall(hashtag_pattern, description)
-                            
-                            # Добавляем решетку обратно и убираем дубликаты
-                            hashtags = list(dict.fromkeys([f'#{tag}' for tag in found_tags]))
-                            
-                            # Ограничиваем до 15 хэштегов, чтобы не засорять таблицу, если в описании спам
-                            hashtags = hashtags[:15]
-                        
-                        print(f"✅ Найдено хэштегов в описании для {video_id}: {len(hashtags)}")
-                        if hashtags:
-                            print(f"   Хэштеги: {', '.join(hashtags)}")
-                        
-                        # Дата
-                        published_at_iso = snippet.get('publishedAt', '')
-                        if published_at_iso:
-                            pub_date = datetime.fromisoformat(published_at_iso.replace('Z', '+00:00'))
-                            published_at = pub_date.strftime('%d.%m.%Y')
-                        
-                        # Длительность
-                        duration_iso = video_info['contentDetails']['duration']
-                        hours = re.search(r'(\d+)H', duration_iso)
-                        minutes = re.search(r'(\d+)M', duration_iso)
-                        seconds = re.search(r'(\d+)S', duration_iso)
-                        
-                        h = int(hours.group(1)) if hours else 0
-                        m = int(minutes.group(1)) if minutes else 0
-                        s = int(seconds.group(1)) if seconds else 0
-                        duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
-                        
-                        # Поиск канала
-                        if isinstance(channels, list):
+                        if channel_id == 'manual':
+                            oembed_name_lower = channel_name.lower().strip()
                             for ch in channels:
-                                ch_url = str(ch.get('url', '')).strip()
-                                if ch_url == yt_channel_id or f'youtube.com/channel/{yt_channel_id}' in ch_url:
+                                db_name_lower = str(ch.get('name', '')).lower().strip()
+                                if db_name_lower == oembed_name_lower or db_name_lower in oembed_name_lower:
                                     channel_id = ch.get('id', 'manual')
                                     channel_name = ch.get('name', channel_name)
                                     break
-                            
-                            if channel_id == 'manual':
-                                oembed_name_lower = channel_name.lower().strip()
-                                for ch in channels:
-                                    db_name_lower = str(ch.get('name', '')).lower().strip()
-                                    if db_name_lower == oembed_name_lower or db_name_lower in oembed_name_lower:
-                                        channel_id = ch.get('id', 'manual')
-                                        channel_name = ch.get('name', channel_name)
-                                        break
                                         
                 except Exception as e:
-                    print(f"⚠️ API ошибка для {video_id}: {e}")
+                    failed_count += 1
+                    failed_details.append({
+                        'id': video_id,
+                        'reason': f'Ошибка API: {str(e)[:50]}',
+                        'url': f'https://youtube.com/watch?v={video_id}'
+                    })
+                    continue
+            else:
+                failed_count += 1
+                failed_details.append({
+                    'id': video_id,
+                    'reason': 'Не указан YouTube API ключ',
+                    'url': f'https://youtube.com/watch?v={video_id}'
+                })
+                continue
             
             # 3. Добавляем в pending
             result = apps_script_request('pending-videos', 'POST', {
@@ -633,7 +648,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                 'channel_name': channel_name,
                 'published_at': published_at,
                 'duration': duration,
-                'hashtags': ','.join(hashtags),  # ← СОХРАНЯЕМ ХЭШТЕГИ
+                'hashtags': ','.join(hashtags),
                 'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
                 'video_url': f'https://youtube.com/watch?v={video_id}'
             })
@@ -642,7 +657,11 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                 added_count += 1
             else:
                 failed_count += 1
-                failed_videos.append(f"{video_id}: ошибка API")
+                failed_details.append({
+                    'id': video_id,
+                    'reason': f'Ошибка Apps Script: {result.get("error", "Неизвестная")}',
+                    'url': f'https://youtube.com/watch?v={video_id}'
+                })
             
             # Обновляем прогресс
             if i % 3 == 0 or i == len(new_video_ids):
@@ -653,22 +672,30 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             
         except Exception as e:
             failed_count += 1
-            failed_videos.append(f"{video_id}: {str(e)[:30]}")
+            failed_details.append({
+                'id': video_id,
+                'reason': f'Неизвестная ошибка: {str(e)[:50]}',
+                'url': f'https://youtube.com/watch?v={video_id}'
+            })
             print(f"❌ Ошибка {video_id}: {e}")
     
-    # Итоговое сообщение
+    # Формируем итоговое сообщение
     result_msg = f"✅ Готово!\n\n"
-    result_msg += f" Добавлено: {added_count}\n"
+    result_msg += f"📊 Статистика:\n"
+    result_msg += f"• Всего ссылок: {len(video_ids)}\n"
+    result_msg += f"• Уже в таблицах: {already_exist_count}\n"  # ← НОВОЕ
+    result_msg += f"• Добавлено: {added_count}\n"
+    result_msg += f"• Ошибок: {failed_count}\n"
     
-    if failed_count > 0:
-        result_msg += f"❌ Ошибок: {failed_count}\n"
-    
-    if failed_videos:
-        result_msg += f"\n📝 Неудачи:\n"
-        for fail in failed_videos[:5]:
-            result_msg += f"• {fail}\n"
-        if len(failed_videos) > 5:
-            result_msg += f"... и ещё {len(failed_videos) - 5}\n"
+    # Показываем детали ошибок если они есть
+    if failed_details:
+        result_msg += f"\n❌ Неудачи:\n"
+        for fail in failed_details[:10]:  # Первые 10
+            result_msg += f"• {fail['id']}: {fail['reason']}\n"
+            result_msg += f"  {fail['url']}\n"
+        
+        if len(failed_details) > 10:
+            result_msg += f"... и ещё {len(failed_details) - 10}\n"
     
     await status_msg.edit_text(result_msg)
 
