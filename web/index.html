@@ -1586,16 +1586,25 @@ function renderPlaylists() {
             return video ? `<div class="playlist-preview-thumb"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" alt=""></div>` : '';
         }).join('');
         
+        const typeBadge = playlist.type === 'dynamic' 
+            ? '<span style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.5);color:#4CAF50;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">АВТО</span>'
+            : '<span style="background:rgba(255,107,0,0.2);border:1px solid rgba(255,107,0,0.5);color:var(--orange);padding:2px 6px;border-radius:4px;font-size:9px;font-weight:700;">РУЧНОЙ</span>';
+        
         return `
             <div class="playlist-card">
                 <div class="playlist-card-header">
                     <div>
-                        <div class="playlist-name">${playlist.name}</div>
+                        <div class="playlist-name">${playlist.name} ${typeBadge}</div>
                         <div class="playlist-count">${playlist.video_ids.length} видео</div>
                     </div>
-                    <button class="playlist-delete-btn" onclick="deletePlaylist('${playlist.id}')">
-                        <svg class="icon"><use href="#i-trash"/></svg>
-                    </button>
+                    <div style="display:flex;gap:4px;">
+                        <button class="playlist-delete-btn" onclick="openAddToPlaylistModal('${playlist.id}')" style="background:rgba(76,175,80,0.2);border:1px solid rgba(76,175,80,0.5);">
+                            <svg class="icon" style="color:#4CAF50;"><use href="#i-plus"/></svg>
+                        </button>
+                        <button class="playlist-delete-btn" onclick="deletePlaylist('${playlist.id}')">
+                            <svg class="icon"><use href="#i-trash"/></svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="playlist-preview">${previewVideos}</div>
             </div>
@@ -2098,6 +2107,79 @@ async function saveEdit() {
     if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 }
 
+let currentPlaylistIdForAdd = null;
+
+function openAddToPlaylistModal(playlistId) {
+    currentPlaylistIdForAdd = playlistId;
+    document.getElementById('playlistVideoSearch').value = '';
+    document.getElementById('addToPlaylistModal').classList.add('visible');
+    renderPlaylistVideoList();
+}
+
+function closeAddToPlaylistModal() {
+    document.getElementById('addToPlaylistModal').classList.remove('visible');
+    currentPlaylistIdForAdd = null;
+}
+
+function renderPlaylistVideoList(filter = '') {
+    const container = document.getElementById('playlistVideoList');
+    if (!container) return;
+    
+    const playlist = playlists.find(p => p.id === currentPlaylistIdForAdd);
+    if (!playlist) return;
+    
+    const existingIds = new Set(playlist.video_ids);
+    
+    const filteredVideos = videos.filter(video => {
+        if (!video.id) return false;
+        if (existingIds.has(video.id)) return false; // Уже в плейлисте
+        if (filter && !video.title.toLowerCase().includes(filter.toLowerCase())) return false;
+        return true;
+    });
+    
+    if (filteredVideos.length === 0) {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Нет доступных видео</div>';
+        return;
+    }
+    
+    container.innerHTML = filteredVideos.map(video => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;" onclick="addVideoToPlaylist('${video.id}')">
+            <img src="https://img.youtube.com/vi/${video.id}/hqdefault.jpg" style="width:60px;height:34px;border-radius:4px;object-fit:cover;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${video.title}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${video.date || ''}</div>
+            </div>
+            <svg class="icon" style="color:var(--orange);"><use href="#i-plus"/></svg>
+        </div>
+    `).join('');
+}
+
+function filterPlaylistVideos() {
+    const filter = document.getElementById('playlistVideoSearch').value;
+    renderPlaylistVideoList(filter);
+}
+
+async function addVideoToPlaylist(videoId) {
+    if (!currentPlaylistIdForAdd) return;
+    
+    try {
+        const result = await apiRequest('playlist-add-video', 'POST', {
+            playlist_id: currentPlaylistIdForAdd,
+            video_id: videoId
+        });
+        
+        if (result.error) {
+            alert('Ошибка: ' + result.error);
+            return;
+        }
+        
+        await loadData();
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } catch (error) {
+        alert('Ошибка при добавлении: ' + error.message);
+    }
+}
+
 document.getElementById('calendarBtn').addEventListener('click', function(e) {
     e.stopPropagation();
     document.getElementById('calendarDropdown').classList.toggle('visible');
@@ -2148,7 +2230,7 @@ document.addEventListener('click', function(e) {
     document.getElementById(id).addEventListener('input', applyFilters);
 });
 
-loadData();
+loadData();        
 </script>
 
     <!-- Модальное окно одобрения видео -->
@@ -2204,6 +2286,30 @@ loadData();
         <div class="modal-actions">
             <button class="modal-btn cancel" onclick="closeApproveModal()">Отмена</button>
             <button class="modal-btn save" onclick="approvePendingVideo()">Добавить</button>
+        </div>
+    </div>
+</div>
+
+    <!-- Модальное окно добавления видео в плейлист -->
+<div class="modal-overlay" id="addToPlaylistModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="modal-title">Добавить видео в плейлист</div>
+            <button class="modal-close" onclick="closeAddToPlaylistModal()">
+                <svg class="icon"><use href="#i-x"/></svg>
+            </button>
+        </div>
+        
+        <div class="modal-field">
+            <div class="modal-label">Выберите видео</div>
+            <input type="text" class="modal-input" id="playlistVideoSearch" placeholder="Поиск по названию..." oninput="filterPlaylistVideos()">
+        </div>
+        
+        <div id="playlistVideoList" style="max-height:300px;overflow-y:auto;margin-bottom:16px;">
+        </div>
+        
+        <div class="modal-actions">
+            <button class="modal-btn cancel" onclick="closeAddToPlaylistModal()">Отмена</button>
         </div>
     </div>
 </div>
