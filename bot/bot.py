@@ -1011,7 +1011,6 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
     # Получаем файл
     file = None
     if update.message.document:
-        # Проверяем расширение
         file_name = update.message.document.file_name or ""
         file_ext = file_name.lower().split('.')[-1] if '.' in file_name else ''
         
@@ -1022,19 +1021,16 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
     else:
         return
     
-    # Проверка размера (макс 2 МБ)
     if file.file_size > 2 * 1024 * 1024:
-        await update.message.reply_text("❌ Файл слишком большой. Максимальный размер: 2 МБ")
+        await update.message.reply_text(" Файл слишком большой. Максимальный размер: 2 МБ")
         return
     
     try:
-        status_msg = await update.message.reply_text("📥 Скачиваю и читаю файл...")
+        status_msg = await update.message.reply_text(" Скачиваю и читаю файл...")
         
-        # Скачиваем и читаем
         file_bytes = await file.download_as_bytearray()
         file_text = file_bytes.decode('utf-8', errors='ignore')
         
-        # Извлекаем ссылки
         youtube_patterns = [
             r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/live/)([0-9A-Za-z_-]{11})',
             r'^([0-9A-Za-z_-]{11})$',
@@ -1042,7 +1038,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         
         lines = [line.strip() for line in file_text.split('\n') if line.strip()]
         video_ids = []
-        unrecognized_count = 0
+        unrecognized_lines = []  # ← Сохраняем нераспознанные строки
         
         for line in lines:
             found = False
@@ -1058,21 +1054,34 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                 found = True
             
             if not found:
-                unrecognized_count += 1
+                unrecognized_lines.append(line)  # ← Добавляем в список
         
         video_ids = list(set(video_ids))
         
-        if not video_ids:
-            await status_msg.edit_text("❌ В файле не найдено ни одной корректной ссылки YouTube.")
+        if not video_ids and not unrecognized_lines:
+            await status_msg.edit_text("❌ Файл пуст или не содержит текста.")
             return
             
+        if not video_ids and unrecognized_lines:
+            msg = f"❌ Не удалось распознать ни одной ссылки!\n\n"
+            msg += f"📊 Статистика:\n"
+            msg += f"• Всего строк: {len(lines)}\n"
+            msg += f"• Распознано: 0\n"
+            msg += f"• Нераспознано: {len(unrecognized_lines)}\n"
+            msg += f"\n❓ Нераспознанные строки (первые 20):\n"
+            for line in unrecognized_lines[:20]:
+                msg += f"• {line}\n"
+            if len(unrecognized_lines) > 20:
+                msg += f"... и ещё {len(unrecognized_lines) - 20}\n"
+            await status_msg.edit_text(msg)
+            return
+
         if len(video_ids) > 3000:
             await status_msg.edit_text("⚠️ Слишком много ссылок (>3000). Разбейте файл на части.")
             return
 
         await status_msg.edit_text(f"🔍 Найдено уникальных ссылок: {len(video_ids)}\nПроверяю существующие...")
         
-        # Проверяем существующие
         videos = apps_script_request('videos', 'GET')
         pending = apps_script_request('pending-videos', 'GET')
         
@@ -1085,7 +1094,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         new_video_ids = [vid for vid in video_ids if vid not in existing_video_ids]
         already_exist_count = len(video_ids) - len(new_video_ids)
         
-        if not new_video_ids:
+        if not new_video_ids and not unrecognized_lines:
             await status_msg.edit_text(f"✅ Все {len(video_ids)} видео из файла уже есть в таблицах.")
             return
         
@@ -1095,11 +1104,10 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
             f"• Распознано: {len(video_ids)}\n"
             f"• Уже в таблицах: {already_exist_count}\n"
             f"• Будет обработано: {len(new_video_ids)}\n"
-            f"• Нераспознано: {unrecognized_count}\n\n"
+            f"• Нераспознано: {len(unrecognized_lines)}\n\n"
             f"🔄 Начинаю пакетную обработку..."
         )
         
-        # Получаем каналы один раз
         channels = apps_script_request('channels', 'GET')
         
         batch_size = 20
@@ -1205,7 +1213,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     
                 except Exception as e:
                     failed_total += 1
-                    failed_details.append(f"https://youtu.be/{video_id}")
+                    failed_details.append(f"https://youtu.be/{video_id} — {str(e)[:30]}")
             
             if batch_data:
                 try:
@@ -1228,7 +1236,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                 f"[{bar}]\n"
                 f"Пакет {current_batch}/{total_batches}\n"
                 f"✅ Добавлено: {added_total}\n"
-                f"❌ Ошибок: {failed_total}"
+                f" Ошибок: {failed_total}"
             )
             
             if current_batch < total_batches:
@@ -1236,12 +1244,19 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         
         # Итоговый отчёт
         report = f"✅ Обработка файла завершена!\n\n"
-        report += f" Итоги:\n"
+        report += f"📊 Итоги:\n"
+        report += f"• Всего строк: {len(lines)}\n"
         report += f"• Распознано: {len(video_ids)}\n"
         report += f"• Уже было: {already_exist_count}\n"
         report += f"• Успешно добавлено: {added_total}\n"
         report += f"• Ошибок: {failed_total}\n"
-        report += f"• Нераспознанных строк: {unrecognized_count}\n"
+        report += f"• Нераспознанных строк: {len(unrecognized_lines)}\n"
+        
+        # Выводим нераспознанные строки
+        if unrecognized_lines:
+            report += f"\n❓:\n"
+            for line in unrecognized_lines:
+                report += f"• {line}\n"
         
         if failed_details:
             report += f"\n❌:\n"
@@ -1252,7 +1267,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         
     except Exception as e:
         await update.message.reply_text(f"❌ Критическая ошибка обработки файла: {str(e)}")
-        print(f"❌ Ошибка файла: {e}")
+        print(f" Ошибка файла: {e}")
 
 
 # ===== ЗАПУСК =====
