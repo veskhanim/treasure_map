@@ -1244,11 +1244,9 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         report += f"• Нераспознанных строк: {unrecognized_count}\n"
         
         if failed_details:
-            report += f"\n❌ Примеры ошибок (первые 10):\n"
-            for fail in failed_details[:10]:
+            report += f"\n❌ Примеры ошибок:\n"
+            for fail in failed_details:
                 report += f"• {fail}\n"
-            if len(failed_details) > 10:
-                report += f"... и ещё {len(failed_details) - 10}\n"
         
         await status_msg.edit_text(report)
         
