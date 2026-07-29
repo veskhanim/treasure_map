@@ -887,6 +887,43 @@ async def extract_hashtags_from_youtube(video_id: str) -> str:
     except Exception as e:
         print(f"⚠️ Ошибка извлечения хэштегов для {video_id}: {e}")
         return None
+
+async def fix_playlists_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Временная команда: обновляет динамические плейлисты для всех видео"""
+    
+    if not check_access(update.effective_user.id):
+        return
+    
+    await update.message.reply_text(
+        "⚠️ ВНИМАНИЕ: Это временная функция!\n\n"
+        "Сейчас я пройдусь по всем видео в таблице Videos,\n"
+        "проверю хэштеги и добавлю видео в динамические плейлисты.\n\n"
+        "Это может занять несколько секунд. Начать?"
+    )
+    
+    status_msg = await update.message.reply_text("🔄 Начинаю обработку...")
+    
+    try:
+        result = apps_script_request('fix-playlists', 'GET')
+        
+        if isinstance(result, dict):
+            if result.get('success'):
+                report = f"✅ Обработка завершена!\n\n"
+                report += f" Статистика:\n"
+                report += f"• Обработано видео: {result.get('processedVideos', 0)}\n"
+                report += f"• Добавлено в плейлисты: {result.get('updatedCount', 0)}\n"
+                report += f"• Пропущено (нет хэштегов): {result.get('skippedCount', 0)}\n"
+                report += f"\n⚠️ Не забудь удалить функцию fix_playlists_command из кода!"
+                
+                await status_msg.edit_text(report)
+            else:
+                await status_msg.edit_text(f"❌ Ошибка: {result.get('error', 'Неизвестная ошибка')}")
+        else:
+            await status_msg.edit_text(f" Неожиданный ответ от сервера")
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
+        print(f"❌ Ошибка fix_playlists: {e}")
         
 # ===== ЗАПУСК =====
 def main():
@@ -908,6 +945,7 @@ def main():
     application.add_handler(CommandHandler("addcat", add_category_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
+    application.add_handler(CommandHandler("fix_playlists", fix_playlists_command))
     
     # Обработка ссылок
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_youtube_link))
