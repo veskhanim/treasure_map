@@ -480,24 +480,41 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Обработка ссылок на YouTube (обычные видео, shorts и live)"""
     text = update.message.text
     
-    # Паттерн для извлечения всех YouTube ссылок (добавлен live)
+    # Разбиваем текст на строки для анализа
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    
+    # Паттерн для извлечения всех YouTube ссылок
     youtube_patterns = [
         r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/live/)([0-9A-Za-z_-]{11})',
         r'^([0-9A-Za-z_-]{11})$',
     ]
     
     video_ids = []
-    for pattern in youtube_patterns[:-1]:
-        matches = re.findall(pattern, text)
-        video_ids.extend(matches)
+    unrecognized_lines = []  # ← Строки которые не распознаны
     
-    if not video_ids and re.match(youtube_patterns[-1], text.strip()):
-        video_ids = [text.strip()]
+    for line in lines:
+        found = False
+        # Проверяем по полным ссылкам
+        for pattern in youtube_patterns[:-1]:
+            matches = re.findall(pattern, line)
+            if matches:
+                video_ids.extend(matches)
+                found = True
+                break
+        
+        # Если не нашли по ссылкам, проверяем на чистый ID
+        if not found and re.match(youtube_patterns[-1], line):
+            video_ids.append(line)
+            found = True
+        
+        # Если ничего не найдено - добавляем в нераспознанные
+        if not found:
+            unrecognized_lines.append(line)
     
     video_ids = list(set(video_ids))
     
-    if not video_ids:
-        return
+    if not video_ids and not unrecognized_lines:
+        return  # Пустое сообщение
     
     # Проверяем существующие видео
     videos = apps_script_request('videos', 'GET')
@@ -512,10 +529,29 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     new_video_ids = [vid for vid in video_ids if vid not in existing_video_ids]
     already_exist_count = len(video_ids) - len(new_video_ids)
     
-    if not new_video_ids:
+    # Если нет видео для добавления И нет нераспознанных строк
+    if not new_video_ids and not unrecognized_lines:
         await update.message.reply_text(
             f"⚠️ Все {len(video_ids)} видео уже есть в таблице."
         )
+        return
+    
+    # Если есть только нераспознанные строки
+    if not new_video_ids and unrecognized_lines:
+        msg = f" Не удалось распознать ни одной ссылки!\n\n"
+        msg += f"📊 Статистика:\n"
+        msg += f"• Всего строк: {len(lines)}\n"
+        msg += f"• Распознано: 0\n"
+        msg += f"• Нераспознано: {len(unrecognized_lines)}\n"
+        
+        if unrecognized_lines:
+            msg += f"\n❓ Нераспознанные строки:\n"
+            for line in unrecognized_lines[:20]:
+                msg += f"• {line}\n"
+            if len(unrecognized_lines) > 20:
+                msg += f"... и ещё {len(unrecognized_lines) - 20}\n"
+        
+        await update.message.reply_text(msg)
         return
     
     # Отправляем сообщение о начале обработки
@@ -533,7 +569,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     for i, video_id in enumerate(new_video_ids, 1):
         try:
-            # 1. Получаем информацию через oEmbed (работает и для live)
+            # 1. Получаем информацию через oEmbed
             oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
             oembed_response = requests.get(oembed_url, timeout=10)
             
@@ -560,7 +596,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     api_response = requests.get(
                         api_url,
                         params={
-                            'part': 'snippet,contentDetails,liveStreamingDetails',  # ← Добавлено liveStreamingDetails
+                            'part': 'snippet,contentDetails,liveStreamingDetails',
                             'id': video_id,
                             'key': YOUTUBE_API_KEY
                         },
@@ -594,7 +630,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                         pub_date = datetime.fromisoformat(published_at_iso.replace('Z', '+00:00'))
                         published_at = pub_date.strftime('%d.%m.%Y')
                     
-                    # Длительность (для live может быть None если ещё идёт)
+                    # Длительность
                     duration_iso = video_info['contentDetails']['duration']
                     if duration_iso:
                         hours = re.search(r'(\d+)H', duration_iso)
@@ -606,7 +642,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                         s = int(seconds.group(1)) if seconds else 0
                         duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
                     else:
-                        duration = 'LIVE'  # Для активных трансляций
+                        duration = 'LIVE'
                     
                     # Поиск канала
                     if isinstance(channels, list):
@@ -669,7 +705,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             # Обновляем прогресс
             if i % 3 == 0 or i == len(new_video_ids):
                 await status_msg.edit_text(
-                    f"🔄 Обрабатываю {len(new_video_ids)} видео...\n\n"
+                    f" Обрабатываю {len(new_video_ids)} видео...\n\n"
                     f"{added_count}/{len(new_video_ids)} добавлено"
                 )
             
@@ -685,13 +721,24 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Формируем итоговое сообщение
     result_msg = f"✅ Готово!\n\n"
     result_msg += f"📊 Статистика:\n"
-    result_msg += f"• Всего ссылок: {len(video_ids)}\n"
+    result_msg += f"• Всего строк: {len(lines)}\n"
+    result_msg += f"• Распознано ссылок: {len(video_ids)}\n"
     result_msg += f"• Уже в таблицах: {already_exist_count}\n"
     result_msg += f"• Добавлено: {added_count}\n"
-    result_msg += f"• Ошибок: {failed_count}\n"
+    result_msg += f"• Ошибок обработки: {failed_count}\n"
+    result_msg += f"• Нераспознано: {len(unrecognized_lines)}\n"  # ← НОВОЕ
     
+    # Показываем нераспознанные строки
+    if unrecognized_lines:
+        result_msg += f"\n❓ Нераспознанные строки:\n"
+        for line in unrecognized_lines[:20]:  # Первые 20
+            result_msg += f"• {line}\n"
+        if len(unrecognized_lines) > 20:
+            result_msg += f"... и ещё {len(unrecognized_lines) - 20}\n"
+    
+    # Показываем детали ошибок
     if failed_details:
-        result_msg += f"\n❌ Неудачи:\n"
+        result_msg += f"\n❌ Неудачи обработки:\n"
         for fail in failed_details[:10]:
             result_msg += f"• {fail['id']}: {fail['reason']}\n"
             result_msg += f"  {fail['url']}\n"
