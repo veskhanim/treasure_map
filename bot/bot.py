@@ -477,12 +477,12 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ссылок на YouTube (одной или нескольких в тексте)"""
+    """Обработка ссылок на YouTube (обычные видео, shorts и live)"""
     text = update.message.text
     
-    # Паттерн для извлечения всех YouTube ссылок
+    # Паттерн для извлечения всех YouTube ссылок (добавлен live)
     youtube_patterns = [
-        r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([0-9A-Za-z_-]{11})',
+        r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/|youtube\.com/live/)([0-9A-Za-z_-]{11})',
         r'^([0-9A-Za-z_-]{11})$',
     ]
     
@@ -526,14 +526,14 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     added_count = 0
     failed_count = 0
-    failed_details = []  # ← Список деталей ошибок
+    failed_details = []
     
     # Получаем список каналов один раз
     channels = apps_script_request('channels', 'GET')
     
     for i, video_id in enumerate(new_video_ids, 1):
         try:
-            # 1. Получаем информацию через oEmbed
+            # 1. Получаем информацию через oEmbed (работает и для live)
             oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
             oembed_response = requests.get(oembed_url, timeout=10)
             
@@ -541,7 +541,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                 failed_count += 1
                 failed_details.append({
                     'id': video_id,
-                    'reason': 'Нет доступа к видео (удалено или приватное)',
+                    'reason': 'Нет доступа к видео (удалено, приватное или не существует)',
                     'url': f'https://youtube.com/watch?v={video_id}'
                 })
                 continue
@@ -560,7 +560,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                     api_response = requests.get(
                         api_url,
                         params={
-                            'part': 'snippet,contentDetails',
+                            'part': 'snippet,contentDetails,liveStreamingDetails',  # ← Добавлено liveStreamingDetails
                             'id': video_id,
                             'key': YOUTUBE_API_KEY
                         },
@@ -594,16 +594,19 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                         pub_date = datetime.fromisoformat(published_at_iso.replace('Z', '+00:00'))
                         published_at = pub_date.strftime('%d.%m.%Y')
                     
-                    # Длительность
+                    # Длительность (для live может быть None если ещё идёт)
                     duration_iso = video_info['contentDetails']['duration']
-                    hours = re.search(r'(\d+)H', duration_iso)
-                    minutes = re.search(r'(\d+)M', duration_iso)
-                    seconds = re.search(r'(\d+)S', duration_iso)
-                    
-                    h = int(hours.group(1)) if hours else 0
-                    m = int(minutes.group(1)) if minutes else 0
-                    s = int(seconds.group(1)) if seconds else 0
-                    duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+                    if duration_iso:
+                        hours = re.search(r'(\d+)H', duration_iso)
+                        minutes = re.search(r'(\d+)M', duration_iso)
+                        seconds = re.search(r'(\d+)S', duration_iso)
+                        
+                        h = int(hours.group(1)) if hours else 0
+                        m = int(minutes.group(1)) if minutes else 0
+                        s = int(seconds.group(1)) if seconds else 0
+                        duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
+                    else:
+                        duration = 'LIVE'  # Для активных трансляций
                     
                     # Поиск канала
                     if isinstance(channels, list):
@@ -683,14 +686,13 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     result_msg = f"✅ Готово!\n\n"
     result_msg += f"📊 Статистика:\n"
     result_msg += f"• Всего ссылок: {len(video_ids)}\n"
-    result_msg += f"• Уже в таблицах: {already_exist_count}\n"  # ← НОВОЕ
+    result_msg += f"• Уже в таблицах: {already_exist_count}\n"
     result_msg += f"• Добавлено: {added_count}\n"
     result_msg += f"• Ошибок: {failed_count}\n"
     
-    # Показываем детали ошибок если они есть
     if failed_details:
         result_msg += f"\n❌ Неудачи:\n"
-        for fail in failed_details[:10]:  # Первые 10
+        for fail in failed_details[:10]:
             result_msg += f"• {fail['id']}: {fail['reason']}\n"
             result_msg += f"  {fail['url']}\n"
         
