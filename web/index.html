@@ -1162,6 +1162,26 @@
             color: var(--text-dim);
         }
 
+        .playlist-detail-btn.sort {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        
+        .playlist-detail-btn.sort.active {
+            background: rgba(255,107,0,0.2);
+            border-color: var(--orange);
+        }
+        
+        .playlist-detail-btn.sort.active .icon {
+            color: var(--orange);
+        }
+        
+        .playlist-detail-btn.sort .icon {
+            width: 16px;
+            height: 16px;
+            color: var(--text-dim);
+        }
+
         @media (max-width: 360px) {
             .video-thumbnail { width: 120px; min-width: 120px; height: 68px; }
             .video-title { font-size: 11px; }
@@ -1320,7 +1340,10 @@
                     <div class="playlist-detail-title" id="playlistDetailTitle"></div>
                     <div class="playlist-detail-count" id="playlistDetailCount"></div>
                 </div>
-                <div class="playlist-detail-actions">
+               <div class="playlist-detail-actions">
+                    <button class="playlist-detail-btn sort" onclick="togglePlaylistSort()" title="Сортировка">
+                        <svg class="icon"><use href="#i-sort"/></svg>
+                    </button>
                     <button class="playlist-detail-btn add" onclick="openAddToPlaylistModal(currentPlaylistIdForAdd)" title="Добавить видео">
                         <svg class="icon"><use href="#i-plus"/></svg>
                     </button>
@@ -1437,6 +1460,7 @@ let editingVideoId = null;
 let editingLang = 'kr';
 let currentPlaylistId = null;
 let teamFilters = { type: 'all', tracked: 'all' };
+let playlistSortAscending = false; // false = сначала новые, true = сначала старые
 
 let videos = [];
 let channels = [];
@@ -1497,7 +1521,25 @@ async function loadData() {
         console.error("❌ Критическая ошибка загрузки данных:", error);
     }
 }
-
+    
+function togglePlaylistSort() {
+    playlistSortAscending = !playlistSortAscending;
+    
+    // Обновляем визуальное состояние кнопки
+    const sortBtn = document.querySelector('.playlist-detail-btn.sort');
+    if (sortBtn) {
+        sortBtn.classList.toggle('active', playlistSortAscending);
+    }
+    
+    // Перерисовываем видео плейлиста с новой сортировкой
+    const playlist = playlists.find(p => p.id === currentPlaylistIdForAdd);
+    if (playlist) {
+        renderPlaylistVideos(playlist);
+    }
+    
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+    
 function getFilteredVideos() {
     const textQuery = document.getElementById('searchText').value.trim().toLowerCase();
     const dateQuery = document.getElementById('searchDate').value;
@@ -1747,6 +1789,13 @@ function closePlaylistDetail() {
     document.getElementById('playlistsContainer').style.display = 'block';
     currentPlaylistIdForAdd = null;
     
+    // Сбрасываем сортировку при закрытии
+    playlistSortAscending = false;
+    const sortBtn = document.querySelector('.playlist-detail-btn.sort');
+    if (sortBtn) {
+        sortBtn.classList.remove('active');
+    }
+    
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
@@ -1757,9 +1806,38 @@ function renderPlaylistVideos(playlist) {
     if (!container) return;
     
     // Фильтруем видео по ID из плейлиста
-    const playlistVideos = playlist.video_ids
+    let playlistVideos = playlist.video_ids
         .map(vid => videos.find(v => v.id === vid))
         .filter(v => v);
+    
+    // Сортировка по дате
+    playlistVideos.sort((a, b) => {
+        const parseDate = (dateStr) => {
+            if (!dateStr) return new Date(0);
+            if (dateStr instanceof Date) return dateStr;
+            
+            const str = String(dateStr).trim();
+            
+            // Формат "DD.MM.YYYY" или "DD/MM/YYYY"
+            if (str.match(/^\d{2}[./]\d{2}[./]\d{4}$/)) {
+                const [day, month, year] = str.split(/[./]/);
+                return new Date(year, month - 1, day);
+            }
+            
+            // Формат "YYYY-MM-DD" (ISO)
+            if (str.match(/^\d{4}-\d{2}-\d{2}/)) {
+                return new Date(str);
+            }
+            
+            const parsed = new Date(str);
+            return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+        };
+        
+        const dateA = parseDate(a.date);
+        const dateB = parseDate(b.date);
+        
+        return playlistSortAscending ? dateA - dateB : dateB - dateA;
+    });
     
     if (playlistVideos.length === 0) {
         container.innerHTML = '';
@@ -1769,7 +1847,7 @@ function renderPlaylistVideos(playlist) {
     
     emptyState.classList.remove('visible');
     
-    // Рендерим каждое видео в формате карточки (как на вкладке Карта)
+    // Рендерим каждое видео в формате карточки
     container.innerHTML = playlistVideos.map(video => `
         <div class="video-card">
             ${renderVideoCard(video)}
