@@ -471,17 +471,21 @@ from datetime import datetime
 from telegram import Update
 from telegram.ext import ContextTypes
 
+import re
+from datetime import datetime
+from telegram import Update
+from telegram.ext import ContextTypes
+
 async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ссылок на YouTube (одной или нескольких)"""
+    """Обработка ссылок на YouTube (одной или нескольких в тексте)"""
     text = update.message.text
     
-    # Паттерн для извлечения всех YouTube ссылок из текста
+    # Паттерн для извлечения всех YouTube ссылок
     youtube_patterns = [
         r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([0-9A-Za-z_-]{11})',
-        r'^([0-9A-Za-z_-]{11})$',  # Просто ID
+        r'^([0-9A-Za-z_-]{11})$',
     ]
     
-    # Извлекаем все video ID из сообщения
     video_ids = []
     for pattern in youtube_patterns[:-1]:
         matches = re.findall(pattern, text)
@@ -508,7 +512,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     new_video_ids = [vid for vid in video_ids if vid not in existing_video_ids]
     
     if not new_video_ids:
-        await update.message.reply_text('️ Все эти видео уже есть в таблице')
+        await update.message.reply_text('⚠️ Все эти видео уже есть в таблице')
         return
     
     # Отправляем сообщение о начале обработки
@@ -521,12 +525,12 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
     failed_count = 0
     failed_videos = []
     
-    # Получаем список каналов ОДИН раз для всех видео
+    # Получаем список каналов один раз
     channels = apps_script_request('channels', 'GET')
     
     for i, video_id in enumerate(new_video_ids, 1):
         try:
-            # 1. Получаем базовую информацию через oEmbed
+            # 1. Получаем информацию через oEmbed
             oembed_url = f'https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json'
             oembed_response = requests.get(oembed_url, timeout=10)
             
@@ -540,8 +544,9 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
             channel_name = oembed_data.get('author_name', 'Неизвестно')
             duration = ''
             published_at = ''
+            hashtags = []  # ← ХЭШТЕГИ
             
-            # 2. Получаем точные данные через YouTube API
+            # 2. YouTube API
             if YOUTUBE_API_KEY:
                 try:
                     api_url = f'https://www.googleapis.com/youtube/v3/videos'
@@ -561,7 +566,28 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                         snippet = video_info['snippet']
                         yt_channel_id = snippet.get('channelId', '')
                         
-                        # Форматируем дату
+                        # ← ИЗВЛЕКАЕМ ХЭШТЕГИ
+                        if 'tags' in snippet:
+                            # YouTube API возвращает теги как список (без #)
+                            api_tags = snippet.get('tags', [])
+                            # Добавляем # к каждому тегу если его нет
+                            hashtags = [tag if tag.startswith('#') else f'#{tag}' for tag in api_tags]
+                        
+                        # Если тегов нет в API, парсим из описания
+                        if not hashtags and 'description' in snippet:
+                            description = snippet.get('description', '')
+                            # Находим все хэштеги (включая корейские символы)
+                            # \w+ не ловит корейский, поэтому используем [^\s]+
+                            hashtag_pattern = r'#([a-zA-Z0-9_가-힣]+)'
+                            found_hashtags = re.findall(hashtag_pattern, description)
+                            # Добавляем # обратно
+                            hashtags = [f'#{tag}' for tag in found_hashtags]
+                        
+                        print(f"️ Найдено хэштегов для {video_id}: {len(hashtags)}")
+                        if hashtags:
+                            print(f"   Хэштеги: {', '.join(hashtags[:5])}")  # Показываем первые 5
+                        
+                        # Дата
                         published_at_iso = snippet.get('publishedAt', '')
                         if published_at_iso:
                             pub_date = datetime.fromisoformat(published_at_iso.replace('Z', '+00:00'))
@@ -578,7 +604,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                         s = int(seconds.group(1)) if seconds else 0
                         duration = f'{h}:{m:02d}:{s:02d}' if h > 0 else f'{m}:{s:02d}'
                         
-                        # 3. ПРОВЕРКА КАНАЛА: Сначала по ID
+                        # Поиск канала
                         if isinstance(channels, list):
                             for ch in channels:
                                 ch_url = str(ch.get('url', '')).strip()
@@ -587,7 +613,6 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                                     channel_name = ch.get('name', channel_name)
                                     break
                             
-                            # 4. ПРОВЕРКА КАНАЛА: Fallback по названию (если не нашли по ID)
                             if channel_id == 'manual':
                                 oembed_name_lower = channel_name.lower().strip()
                                 for ch in channels:
@@ -598,9 +623,9 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                                         break
                                         
                 except Exception as e:
-                    print(f"⚠️ Ошибка YouTube API для {video_id}: {e}")
+                    print(f"⚠️ API ошибка для {video_id}: {e}")
             
-            # 5. Добавляем в pending
+            # 3. Добавляем в pending
             result = apps_script_request('pending-videos', 'POST', {
                 'id': video_id,
                 'title': oembed_data.get('title', 'Без названия'),
@@ -608,6 +633,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                 'channel_name': channel_name,
                 'published_at': published_at,
                 'duration': duration,
+                'hashtags': ','.join(hashtags),  # ← СОХРАНЯЕМ ХЭШТЕГИ
                 'thumbnail_url': f'https://img.youtube.com/vi/{video_id}/hqdefault.jpg',
                 'video_url': f'https://youtube.com/watch?v={video_id}'
             })
@@ -618,7 +644,7 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
                 failed_count += 1
                 failed_videos.append(f"{video_id}: ошибка API")
             
-            # Обновляем статус каждые 3 видео или в конце
+            # Обновляем прогресс
             if i % 3 == 0 or i == len(new_video_ids):
                 await status_msg.edit_text(
                     f"🔄 Обрабатываю {len(new_video_ids)} видео...\n\n"
@@ -628,14 +654,14 @@ async def handle_youtube_link(update: Update, context: ContextTypes.DEFAULT_TYPE
         except Exception as e:
             failed_count += 1
             failed_videos.append(f"{video_id}: {str(e)[:30]}")
-            print(f"❌ Ошибка обработки {video_id}: {e}")
+            print(f"❌ Ошибка {video_id}: {e}")
     
     # Итоговое сообщение
     result_msg = f"✅ Готово!\n\n"
-    result_msg += f"➕ Добавлено: {added_count}\n"
+    result_msg += f" Добавлено: {added_count}\n"
     
     if failed_count > 0:
-        result_msg += f" Ошибок: {failed_count}\n"
+        result_msg += f"❌ Ошибок: {failed_count}\n"
     
     if failed_videos:
         result_msg += f"\n📝 Неудачи:\n"
