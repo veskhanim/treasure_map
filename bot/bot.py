@@ -1008,7 +1008,6 @@ from telegram.ext import ContextTypes, MessageHandler, filters
 async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработка файла со списком YouTube ссылок (поддержка тысяч ссылок)"""
     
-    # Получаем файл
     file = None
     if update.message.document:
         file_name = update.message.document.file_name or ""
@@ -1022,11 +1021,11 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         return
     
     if file.file_size > 2 * 1024 * 1024:
-        await update.message.reply_text(" Файл слишком большой. Максимальный размер: 2 МБ")
+        await update.message.reply_text("❌ Файл слишком большой. Максимальный размер: 2 МБ")
         return
     
     try:
-        status_msg = await update.message.reply_text(" Скачиваю и читаю файл...")
+        status_msg = await update.message.reply_text("📥 Скачиваю и читаю файл...")
         
         file_bytes = await file.download_as_bytearray()
         file_text = file_bytes.decode('utf-8', errors='ignore')
@@ -1038,7 +1037,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         
         lines = [line.strip() for line in file_text.split('\n') if line.strip()]
         video_ids = []
-        unrecognized_lines = []  # ← Сохраняем нераспознанные строки
+        unrecognized_lines = []
         
         for line in lines:
             found = False
@@ -1054,7 +1053,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                 found = True
             
             if not found:
-                unrecognized_lines.append(line)  # ← Добавляем в список
+                unrecognized_lines.append(line)
         
         video_ids = list(set(video_ids))
         
@@ -1063,24 +1062,30 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
             return
             
         if not video_ids and unrecognized_lines:
-            msg = f"❌ Не удалось распознать ни одной ссылки!\n\n"
-            msg += f"📊 Статистика:\n"
-            msg += f"• Всего строк: {len(lines)}\n"
-            msg += f"• Распознано: 0\n"
-            msg += f"• Нераспознано: {len(unrecognized_lines)}\n"
-            msg += f"\n❓ Нераспознанные строки (первые 20):\n"
-            for line in unrecognized_lines[:20]:
-                msg += f"• {line}\n"
-            if len(unrecognized_lines) > 20:
-                msg += f"... и ещё {len(unrecognized_lines) - 20}\n"
-            await status_msg.edit_text(msg)
+            # Создаём файл с нераспознанными строками
+            error_file_content = "НЕРАСПОЗНАННЫЕ ССЫЛКИ\n"
+            error_file_content += "=" * 50 + "\n\n"
+            for line in unrecognized_lines:
+                error_file_content += f"{line}\n"
+            
+            with open(f'unrecognized_{update.message.message_id}.txt', 'w', encoding='utf-8') as f:
+                f.write(error_file_content)
+            
+            await update.message.reply_document(
+                document=open(f'unrecognized_{update.message.message_id}.txt', 'rb'),
+                filename=f'neraspoznanno_{len(unrecognized_lines)}.txt',
+                caption=f"❌ Не удалось распознать ни одной ссылки!\n\nВсего нераспознанных строк: {len(unrecognized_lines)}"
+            )
+            
+            import os
+            os.remove(f'unrecognized_{update.message.message_id}.txt')
             return
 
-        if len(video_ids) > 3000:
-            await status_msg.edit_text("⚠️ Слишком много ссылок (>3000). Разбейте файл на части.")
+        if len(video_ids) > 5000:
+            await status_msg.edit_text("⚠️ Слишком много ссылок (>5000). Разбейте файл на части.")
             return
 
-        await status_msg.edit_text(f"🔍 Найдено уникальных ссылок: {len(video_ids)}\nПроверяю существующие...")
+        await status_msg.edit_text(f" Найдено уникальных ссылок: {len(video_ids)}\nПроверяю существующие...")
         
         videos = apps_script_request('videos', 'GET')
         pending = apps_script_request('pending-videos', 'GET')
@@ -1115,7 +1120,7 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
         current_batch = 0
         added_total = 0
         failed_total = 0
-        failed_details = []
+        failed_links = []  # ← Все ссылки с ошибками
         
         for i in range(0, len(new_video_ids), batch_size):
             current_batch += 1
@@ -1129,7 +1134,10 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     
                     if oembed_response.status_code != 200:
                         failed_total += 1
-                        failed_details.append(f"https://youtu.be/{video_id} — Нет доступа (удалено/приватное)")
+                        failed_links.append({
+                            'url': f'https://youtu.be/{video_id}',
+                            'reason': 'Нет доступа (удалено/приватное)'
+                        })
                         continue
                     
                     oembed_data = oembed_response.json()
@@ -1151,7 +1159,10 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                             
                             if not api_data.get('items'):
                                 failed_total += 1
-                                failed_details.append(f"https://youtu.be/{video_id} — Видео не найдено в API")
+                                failed_links.append({
+                                    'url': f'https://youtu.be/{video_id}',
+                                    'reason': 'Видео не найдено в API'
+                                })
                                 continue
                             
                             video_info = api_data['items'][0]
@@ -1192,11 +1203,17 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                                             break
                         except Exception as e:
                             failed_total += 1
-                            failed_details.append(f"https://youtu.be/{video_id} — Ошибка API")
+                            failed_links.append({
+                                'url': f'https://youtu.be/{video_id}',
+                                'reason': f'Ошибка API: {str(e)[:50]}'
+                            })
                             continue
                     else:
                         failed_total += 1
-                        failed_details.append(f"https://youtu.be/{video_id} — Не указан YouTube API ключ")
+                        failed_links.append({
+                            'url': f'https://youtu.be/{video_id}',
+                            'reason': 'Не указан YouTube API ключ'
+                        })
                         continue
                     
                     batch_data.append({
@@ -1213,7 +1230,10 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                     
                 except Exception as e:
                     failed_total += 1
-                    failed_details.append(f"https://youtu.be/{video_id} — {str(e)[:30]}")
+                    failed_links.append({
+                        'url': f'https://youtu.be/{video_id}',
+                        'reason': f'Неизвестная ошибка: {str(e)[:50]}'
+                    })
             
             if batch_data:
                 try:
@@ -1222,8 +1242,18 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                         added_total += result.get('added', len(batch_data))
                     else:
                         failed_total += len(batch_data)
+                        for vid in batch_ids:
+                            failed_links.append({
+                                'url': f'https://youtu.be/{vid}',
+                                'reason': 'Ошибка Apps Script'
+                            })
                 except Exception as e:
                     failed_total += len(batch_data)
+                    for vid in batch_ids:
+                        failed_links.append({
+                            'url': f'https://youtu.be/{vid}',
+                            'reason': f'Ошибка отправки: {str(e)[:30]}'
+                        })
                     print(f"❌ Ошибка пакетной отправки: {e}")
             
             progress_pct = int((current_batch / total_batches) * 100)
@@ -1236,39 +1266,69 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
                 f"[{bar}]\n"
                 f"Пакет {current_batch}/{total_batches}\n"
                 f"✅ Добавлено: {added_total}\n"
-                f" Ошибок: {failed_total}"
+                f"❌ Ошибок: {failed_total}"
             )
             
             if current_batch < total_batches:
                 await asyncio.sleep(1.5)
         
-        # Итоговый отчёт
-        report = f"✅ Обработка файла завершена!\n\n"
-        report += f"📊 Итоги:\n"
-        report += f"• Всего строк: {len(lines)}\n"
-        report += f"• Распознано: {len(video_ids)}\n"
-        report += f"• Уже было: {already_exist_count}\n"
-        report += f"• Успешно добавлено: {added_total}\n"
-        report += f"• Ошибок: {failed_total}\n"
-        report += f"• Нераспознанных строк: {len(unrecognized_lines)}\n"
+        # Создаём файл с ошибками и нераспознанными ссылками
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'errors_{timestamp}.txt'
         
-        # Выводим нераспознанные строки
+        error_file_content = "ОТЧЁТ ОБ ОБРАБОТКЕ ФАЙЛА\n"
+        error_file_content += "=" * 50 + "\n\n"
+        error_file_content += f"Всего строк в файле: {len(lines)}\n"
+        error_file_content += f"Распознано ссылок: {len(video_ids)}\n"
+        error_file_content += f"Уже было в таблицах: {already_exist_count}\n"
+        error_file_content += f"Успешно добавлено: {added_total}\n"
+        error_file_content += f"Ошибок обработки: {failed_total}\n"
+        error_file_content += f"Нераспознанных строк: {len(unrecognized_lines)}\n\n"
+        
         if unrecognized_lines:
-            report += f"\n❓:\n"
+            error_file_content += "=" * 50 + "\n"
+            error_file_content += "НЕРАСПОЗНАННЫЕ ССЫЛКИ\n"
+            error_file_content += "=" * 50 + "\n\n"
             for line in unrecognized_lines:
-                report += f"• {line}\n"
+                error_file_content += f"{line}\n"
+            error_file_content += "\n"
         
-        if failed_details:
-            report += f"\n❌:\n"
-            for fail in failed_details:
-                report += f"• {fail}\n"
+        if failed_links:
+            error_file_content += "=" * 50 + "\n"
+            error_file_content += "ССЫЛКИ С ОШИБКАМИ ОБРАБОТКИ\n"
+            error_file_content += "=" * 50 + "\n\n"
+            for fail in failed_links:
+                error_file_content += f"{fail['url']} — {fail['reason']}\n"
         
-        await status_msg.edit_text(report)
+        # Записываем файл
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write(error_file_content)
+        
+        # Отправляем файл пользователю
+        caption = f"✅ Обработка завершена!\n\n"
+        caption += f"📊 Итоги:\n"
+        caption += f"• Распознано: {len(video_ids)}\n"
+        caption += f"• Уже было: {already_exist_count}\n"
+        caption += f"• Добавлено: {added_total}\n"
+        caption += f"• Ошибок: {failed_total}\n"
+        caption += f"• Нераспознано: {len(unrecognized_lines)}\n\n"
+        
+        if failed_total > 0 or len(unrecognized_lines) > 0:
+            caption += f"📎 Все проблемные ссылки в прикреплённом файле"
+        
+        await update.message.reply_document(
+            document=open(filename, 'rb'),
+            filename=filename,
+            caption=caption
+        )
+        
+        # Удаляем временный файл
+        import os
+        os.remove(filename)
         
     except Exception as e:
         await update.message.reply_text(f"❌ Критическая ошибка обработки файла: {str(e)}")
-        print(f" Ошибка файла: {e}")
-
+        print(f"❌ Ошибка файла: {e}")
 
 # ===== ЗАПУСК =====
 def main():
