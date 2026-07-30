@@ -1302,6 +1302,19 @@
             filter: brightness(1.1);
         }
 
+        .modal-btn.delete {
+            transition: all 0.2s;
+        }
+        
+        .modal-btn.delete:hover {
+            background: rgba(234, 67, 53, 0.3) !important;
+            border-color: #ea4335 !important;
+        }
+        
+        .modal-btn.delete:active {
+            transform: scale(0.95);
+        }
+
         @media (max-width: 360px) {
             .video-thumbnail { width: 120px; min-width: 120px; height: 68px; }
             .video-title { font-size: 11px; }
@@ -2545,48 +2558,57 @@ function openEditModal(videoId) {
     
     editingVideoId = videoId;
     
-    // Определяем язык оригинала
     const originalLang = video.original_lang || 'kr';
     
-    // Заполняем превью
     document.getElementById('editVideoThumb').src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
     
-    // Заполняем поля
     document.getElementById('editTitle').value = video.title || '';
     document.getElementById('editRuUrl').value = video.ru_url || '';
     document.getElementById('editHashtags').value = video.hashtags || '';
     
-    // Показываем язык оригинала
+    // Заполняем поле даты
+    let dateDisplay = '';
+    if (video.date) {
+        const dateStr = String(video.date);
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}/)) {
+            const [year, month, day] = dateStr.split('-');
+            dateDisplay = `${day}.${month}.${year}`;
+        } else if (dateStr.match(/^\d{2}[./]\d{2}[./]\d{4}$/)) {
+            dateDisplay = dateStr.replace(/\//g, '.');
+        } else if (video.date instanceof Date) {
+            const d = video.date;
+            dateDisplay = `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
+        } else {
+            dateDisplay = dateStr;
+        }
+    }
+    document.getElementById('editDate').value = dateDisplay;
+    
     const langDisplay = document.getElementById('editOriginalLangDisplay');
     if (originalLang === 'kr') {
         langDisplay.innerHTML = '🇰🇷 Корейский';
         langDisplay.style.borderColor = 'rgba(255,107,0,0.5)';
         langDisplay.style.color = '#ff6b00';
     } else {
-        langDisplay.innerHTML = '🇬🇧 Английский';
+        langDisplay.innerHTML = '🇬 Английский';
         langDisplay.style.borderColor = 'rgba(66,133,244,0.5)';
         langDisplay.style.color = '#4285f4';
     }
     
-    // Показываем/скрываем поле EN в зависимости от языка оригинала
     const enUrlField = document.getElementById('editEnUrlField');
     if (originalLang === 'kr') {
-        // Если оригинал корейский - показываем поле для EN перевода
         enUrlField.style.display = 'block';
         document.getElementById('editEnUrl').value = video.en_url || '';
     } else {
-        // Если оригинал английский - скрываем поле EN
         enUrlField.style.display = 'none';
         document.getElementById('editEnUrl').value = '';
     }
     
-    // Категория
     const categorySelect = document.getElementById('editCategory');
     categorySelect.innerHTML = categories.map(c => 
         `<option value="${c.name}" ${c.name === video.category ? 'selected' : ''}>${c.name}</option>`
     ).join('');
     
-    // Участники
     const membersContainer = document.getElementById('editMembers');
     const allMembers = [
         {id: 'Hongjoong', name: 'Хонджун'},
@@ -2614,22 +2636,29 @@ function openEditModal(videoId) {
     if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
+function toggleEditMember(tag) {
+    tag.classList.toggle('active');
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('visible');
+    editingVideoId = null;
+}
+
 async function saveEdit() {
     if (!editingVideoId) return;
     
     const video = videos.find(v => v.id === editingVideoId);
     if (!video) return;
     
-    // Собираем редактируемые поля
     const title = document.getElementById('editTitle').value.trim();
     const ruUrl = document.getElementById('editRuUrl').value.trim();
     const hashtags = document.getElementById('editHashtags').value.trim();
     const category = document.getElementById('editCategory').value;
+    const dateStr = document.getElementById('editDate').value.trim();
     
-    // Определяем язык оригинала
     const originalLang = video.original_lang || 'kr';
     
-    // EN перевод только если оригинал корейский
     let enUrl = '';
     if (originalLang === 'kr') {
         enUrl = document.getElementById('editEnUrl').value.trim();
@@ -2640,22 +2669,31 @@ async function saveEdit() {
         return;
     }
     
-    // Обновляем только разрешённые поля
+    // Валидация даты
+    let dateToSave = '';
+    if (dateStr) {
+        const match = dateStr.match(/^(\d{2})[./](\d{2})[./](\d{4})$/);
+        if (match) {
+            dateToSave = `${match[1]}.${match[2]}.${match[3]}`;
+        } else {
+            alert('Неверный формат даты. Используйте dd.mm.yyyy (например, 22.07.2026)');
+            return;
+        }
+    }
+    
     video.title = title;
     video.ru_url = ruUrl;
     video.hashtags = hashtags;
     video.category = category;
+    video.date = dateToSave;
     
-    // EN перевод только если оригинал корейский
     if (originalLang === 'kr') {
         video.en_url = enUrl;
     }
     
-    // Участники
     const activeTags = document.querySelectorAll('#editMembers .modal-member-tag.active');
     video.members = Array.from(activeTags).map(tag => tag.dataset.member);
     
-    // Показываем загрузку
     const saveBtn = document.querySelector('#editModal .modal-btn.save');
     const originalText = saveBtn.textContent;
     saveBtn.textContent = 'Сохранение...';
@@ -2680,13 +2718,40 @@ async function saveEdit() {
     }
 }
 
-function toggleEditMember(tag) {
-    tag.classList.toggle('active');
-}
-
-function closeEditModal() {
-    document.getElementById('editModal').classList.remove('visible');
-    editingVideoId = null;
+async function deleteVideoFromEdit() {
+    if (!editingVideoId) return;
+    
+    const video = videos.find(v => v.id === editingVideoId);
+    if (!video) return;
+    
+    const confirmed = tg.showConfirm 
+        ? await new Promise(resolve => tg.showConfirm(`Удалить видео "${video.title}"?\n\nЭто действие нельзя отменить.`, resolve))
+        : confirm(`Удалить видео "${video.title}"?\n\nЭто действие нельзя отменить.`);
+    
+    if (!confirmed) return;
+    
+    const deleteBtn = document.querySelector('#editModal .modal-btn.delete');
+    const originalText = deleteBtn.textContent;
+    deleteBtn.textContent = 'Удаление...';
+    deleteBtn.disabled = true;
+    
+    try {
+        const result = await apiRequest('videos', 'DELETE', null, { id: editingVideoId });
+        
+        if (result.error) {
+            alert('Ошибка: ' + result.error);
+            return;
+        }
+        
+        closeEditModal();
+        await loadData();
+        if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+    } catch (error) {
+        alert('Ошибка при удалении: ' + error.message);
+    } finally {
+        deleteBtn.textContent = originalText;
+        deleteBtn.disabled = false;
+    }
 }
 
 function openAddToPlaylistModal(playlistId) {
@@ -2928,16 +2993,22 @@ loadData();
             </div>
         </div>
         
-        <!-- Ссылка на перевод RU (всегда показывается) -->
+        <!-- Ссылка на перевод RU -->
         <div class="modal-field">
             <div class="modal-label">Ссылка на перевод (RU)</div>
             <input type="text" class="modal-input" id="editRuUrl" placeholder="https://youtube.com/watch?v=...">
         </div>
         
-        <!-- Ссылка на перевод EN (только если оригинал корейский) -->
+        <!-- Ссылка на перевод EN -->
         <div class="modal-field" id="editEnUrlField" style="display:none;">
             <div class="modal-label">Ссылка на перевод (EN)</div>
             <input type="text" class="modal-input" id="editEnUrl" placeholder="https://youtube.com/watch?v=...">
+        </div>
+        
+        <!-- Дата публикации (НОВОЕ) -->
+        <div class="modal-field">
+            <div class="modal-label">Дата публикации (dd.mm.yyyy)</div>
+            <input type="text" class="modal-input" id="editDate" placeholder="22.07.2026">
         </div>
         
         <!-- Категория -->
@@ -2959,9 +3030,17 @@ loadData();
             <div id="editMembers" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
         </div>
         
+        <!-- Кнопки действий -->
         <div class="modal-actions">
-            <button class="modal-btn cancel" onclick="closeEditModal()">Отмена</button>
-            <button class="modal-btn save" onclick="saveEdit()">Сохранить</button>
+            <button class="modal-btn delete" onclick="deleteVideoFromEdit()" style="background:rgba(234,67,53,0.2);border:1px solid rgba(234,67,53,0.5);color:#ea4335;flex:1;">
+                Удалить
+            </button>
+            <button class="modal-btn cancel" onclick="closeEditModal()" style="flex:1;">
+                Отмена
+            </button>
+            <button class="modal-btn save" onclick="saveEdit()" style="flex:1;">
+                Сохранить
+            </button>
         </div>
     </div>
 </div>
