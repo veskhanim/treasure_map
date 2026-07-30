@@ -1329,7 +1329,32 @@ async def handle_file_with_links(update: Update, context: ContextTypes.DEFAULT_T
     except Exception as e:
         await update.message.reply_text(f"❌ Критическая ошибка обработки файла: {str(e)}")
         print(f"❌ Ошибка файла: {e}")
-
+        
+async def fix_pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Команда для очистки PendingVideos от дубликатов, которые уже есть в Videos"""
+    
+    if not check_access(update.effective_user.id):
+        return
+    
+    status_msg = await update.message.reply_text("🔄 Сканирую таблицы на наличие дубликатов...")
+    
+    try:
+        result = apps_script_request('fix-pending-duplicates', 'POST')
+        
+        if isinstance(result, dict) and result.get('success'):
+            deleted = result.get('deleted', 0)
+            await status_msg.edit_text(
+                f"✅ Готово!\n\n"
+                f"🗑 Удалено дубликатов из Pending: **{deleted}**\n"
+                f"Теперь в списке 'Новые видео' остались только уникальные записи."
+            )
+        else:
+            await status_msg.edit_text(f"❌ Ошибка: {result.get('error', 'Неизвестная ошибка')}")
+            
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
+        print(f"❌ Ошибка fix_pending: {e}")
+        
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
@@ -1351,6 +1376,7 @@ def main():
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
     application.add_handler(CommandHandler("fix_playlists", fix_playlists_command))
+    application.add_handler(CommandHandler("fix_pending", fix_pending_command))
     # Обработка файлов со ссылками (ПЕРЕД текстовым хендлером!)
     application.add_handler(MessageHandler(
         filters.Document.ALL,
