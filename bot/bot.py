@@ -1354,7 +1354,122 @@ async def fix_pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
         print(f"❌ Ошибка fix_pending: {e}")
+
+async def find_videos_duplicates_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Поиск дубликатов в таблице Videos"""
+    
+    if not check_access(update.effective_user.id):
+        return
+    
+    status_msg = await update.message.reply_text("🔍 Ищу дубликаты в таблице Videos...")
+    
+    try:
+        result = apps_script_request('find-videos-duplicates', 'POST')
         
+        if not isinstance(result, dict) or not result.get('success'):
+            await status_msg.edit_text(f"❌ Ошибка: {result.get('error', 'Неизвестная ошибка')}")
+            return
+        
+        duplicates = result.get('duplicates', [])
+        total_duplicates = result.get('total_duplicates', 0)
+        
+        if total_duplicates == 0:
+            await status_msg.edit_text("✅ Дубликаты не найдены! Таблица чиста.")
+            return
+        
+        # Формируем сообщение со списком дубликатов
+        msg = f"⚠️ Найдено дубликатов: **{total_duplicates}**\n\n"
+        msg += "📋 Список дублирующихся видео:\n\n"
+        
+        rows_to_delete = []
+        
+        for i, dup in enumerate(duplicates[:15], 1):  # Показываем первые 15
+            yt_id = dup.get('youtubeId', 'Unknown')
+            count = dup.get('count', 0)
+            rows = dup.get('rows', [])
+            
+            msg += f"**{i}. YouTube ID:** `{yt_id}` ({count} раз)\n"
+            
+            for j, row in enumerate(rows, 1):
+                row_num = row.get('rowNumber', '?')
+                title = row.get('title', 'Без названия')[:60]
+                date = row.get('date', '')
+                
+                # Обрезаем заголовок если длинный
+                if len(title) > 60:
+                    title = title[:57] + '...'
+                
+                msg += f"   ├─ Строка {row_num}: {title}"
+                if date:
+                    msg += f" ({date})"
+                msg += "\n"
+            
+            # Добавляем все строки кроме первой в список на удаление
+            for row in rows[1:]:
+                rows_to_delete.append(row.get('rowNumber'))
+            
+            msg += "\n"
+        
+        if total_duplicates > 15:
+            msg += f"... и ещё {total_duplicates - 15} дубликатов\n\n"
+        
+        msg += f"🗑 **Будет удалено строк: {len(rows_to_delete)}**\n\n"
+        msg += "Нажмите /confirm_delete_duplicates для удаления дубликатов\n"
+        msg += "или /cancel для отмены."
+        
+        # Сохраняем список строк для удаления в контекст
+        context.user_data['rows_to_delete'] = rows_to_delete
+        
+        await status_msg.edit_text(msg, parse_mode='Markdown')
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
+        print(f"❌ Ошибка find_videos_duplicates: {e}")
+
+
+async def confirm_delete_duplicates_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подтверждение удаления дубликатов"""
+    
+    if not check_access(update.effective_user.id):
+        return
+    
+    rows_to_delete = context.user_data.get('rows_to_delete', [])
+    
+    if not rows_to_delete:
+        await update.message.reply_text(
+            "❌ Список дубликатов пуст. Сначала выполните /find_videos_duplicates"
+        )
+        return
+    
+    status_msg = await update.message.reply_text(f"🗑 Удаляю {len(rows_to_delete)} дубликатов...")
+    
+    try:
+        result = apps_script_request('delete-videos-duplicates', 'POST', {
+            'rows_to_delete': rows_to_delete
+        })
+        
+        if isinstance(result, dict) and result.get('success'):
+            deleted = result.get('deleted', 0)
+            await status_msg.edit_text(
+                f"✅ Готово!\n\n"
+                f"🗑 Удалено дубликатов: **{deleted}**\n"
+                f"Таблица Videos очищена."
+            )
+        else:
+            await status_msg.edit_text(f"❌ Ошибка: {result.get('error', 'Неизвестная ошибка')}")
+        
+        # Очищаем контекст
+        context.user_data.pop('rows_to_delete', None)
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
+        print(f"❌ Ошибка confirm_delete_duplicates: {e}")
+
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена операции"""
+    context.user_data.pop('rows_to_delete', None)
+    await update.message.reply_text(" Операция отменена.")
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
@@ -1377,6 +1492,9 @@ def main():
     application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
     application.add_handler(CommandHandler("fix_playlists", fix_playlists_command))
     application.add_handler(CommandHandler("fix_pending", fix_pending_command))
+    application.add_handler(CommandHandler("find_videos_duplicates", find_videos_duplicates_command))
+    application.add_handler(CommandHandler("confirm_delete_duplicates", confirm_delete_duplicates_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
     # Обработка файлов со ссылками (ПЕРЕД текстовым хендлером!)
     application.add_handler(MessageHandler(
         filters.Document.ALL,
