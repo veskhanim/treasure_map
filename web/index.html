@@ -1558,6 +1558,79 @@
 </div>
 
 <script>
+    // Глобальный обработчик ошибок
+window.onerror = function(message, source, lineno, colno, error) {
+    const errorDetails = {
+        message: message,
+        source: source,
+        line: lineno,
+        column: colno,
+        stack: error ? error.stack : 'No stack trace'
+    };
+    
+    console.error('Global error:', errorDetails);
+    
+    // Отправляем лог в бот
+    sendLogToBot('error', message, JSON.stringify(errorDetails));
+    
+    return false;
+};
+
+// Обработчик необработанных промисов
+window.onunhandledrejection = function(event) {
+    const errorDetails = {
+        reason: event.reason,
+        message: event.reason ? event.reason.message || event.reason.toString() : 'Unknown promise rejection'
+    };
+    
+    console.error('Unhandled promise rejection:', errorDetails);
+    
+    sendLogToBot('promise_error', errorDetails.message, JSON.stringify(errorDetails));
+};
+
+// Функция отправки логов
+async function sendLogToBot(type, message, details = '') {
+    try {
+        // Обрезаем длинные сообщения
+        const maxMessageLength = 500;
+        const maxDetailsLength = 1000;
+        
+        const truncatedMessage = message.length > maxMessageLength 
+            ? message.substring(0, maxMessageLength) + '...' 
+            : message;
+        
+        const truncatedDetails = details.length > maxDetailsLength 
+            ? details.substring(0, maxDetailsLength) + '...' 
+            : details;
+        
+        await apiRequest('logs', 'POST', {
+            type: type,
+            message: truncatedMessage,
+            details: truncatedDetails
+        });
+    } catch (e) {
+        console.error('Failed to send log:', e);
+    }
+}
+
+// Проверка доступности сервиса при загрузке
+window.addEventListener('load', async function() {
+    try {
+        const startTime = Date.now();
+        await apiRequest('health', 'GET');
+        const responseTime = Date.now() - startTime;
+        
+        console.log(`Service health check: OK (${responseTime}ms)`);
+        
+        // Если ответ слишком долгий - логируем
+        if (responseTime > 5000) {
+            sendLogToBot('warning', `Slow response: ${responseTime}ms`);
+        }
+    } catch (e) {
+        console.error('Service health check failed:', e);
+        sendLogToBot('critical', 'Service unavailable', e.message);
+    }
+});
 const tg = window.Telegram.WebApp;
 tg.expand();
 tg.ready();
