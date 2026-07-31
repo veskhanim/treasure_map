@@ -1810,6 +1810,43 @@ function renderMemberTags(members) {
     return members.map(m => `<span class="member-tag">${m}</span>`).join('');
 }
 
+async function toggleVideoProgress(videoId) {
+    const video = videos.find(v => v.id === videoId);
+    if (!video) return;
+    
+    const watchedOriginal = video.watched_original === true || video.watched_original === 'true';
+    const watchedRu = video.watched_ru === true || video.watched_ru === 'true';
+    const watchedEn = video.watched_en === true || video.watched_en === 'true';
+    
+    let newOriginal = watchedOriginal;
+    let newRu = watchedRu;
+    let newEn = watchedEn;
+    
+    if (watchedOriginal && watchedRu && watchedEn) {
+        newOriginal = false;
+        newRu = false;
+        newEn = false;
+    } else if (!watchedOriginal) {
+        newOriginal = true;
+    } else if (!watchedRu) {
+        newRu = true;
+    } else if (!watchedEn) {
+        newEn = true;
+    }
+    
+    video.watched_original = newOriginal;
+    video.watched_ru = newRu;
+    video.watched_en = newEn;
+    
+    try {
+        await apiRequest('videos', 'PUT', video, { id: videoId });
+        await loadData();
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    } catch (error) {
+        console.error('Ошибка:', error);
+    }
+}
+
 function renderVideoCard(video, controlsHtml) {
     // Универсальное получение ID видео (пробуем разные названия полей)
     const videoId = video.id || video.video_id || video.youtube_id || '';
@@ -1918,7 +1955,7 @@ function renderVideoCard(video, controlsHtml) {
                     </a>
                 ` : '<span class="video-link disabled">RU</span>'}
                 
-                <div class="watched-progress" onclick="toggleWatchedProgress('${video.id}')">
+                <div class="watched-progress" onclick="toggleVideoProgress('${video.id}')" style="cursor:pointer;">
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: ${progressPercent}%"></div>
                         <span class="progress-label">${label}</span>
