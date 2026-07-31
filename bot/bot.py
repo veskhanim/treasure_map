@@ -1,6 +1,7 @@
 import os
 import re
 import requests
+import time
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -1354,8 +1355,108 @@ async def fix_pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except Exception as e:
         await status_msg.edit_text(f"❌ Критическая ошибка: {str(e)}")
         print(f"❌ Ошибка fix_pending: {e}")
+        
+async def logs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Просмотр последних логов приложения"""
+    
+    if not check_access(update.effective_user.id):
+        return
+    
+    status_msg = await update.message.reply_text("📋 Загружаю логи...")
+    
+    try:
+        result = apps_script_request('get-logs', 'GET')
+        
+        if not isinstance(result, dict) or not result.get('logs'):
+            await status_msg.edit_text("✅ Логов нет. Всё работает отлично!")
+            return
+        
+        logs = result.get('logs', [])
+        
+        msg = f"📋 Последние логи ({len(logs)} записей):\n\n"
+        
+        # Показываем только ошибки и критические
+        error_logs = [log for log in logs if log.get('type') in ['error', 'critical', 'promise_error']]
+        
+        if not error_logs:
+            msg += "✅ Ошибок не найдено!\n\n"
+        else:
+            msg += f" Ошибки ({len(error_logs)}):\n\n"
+            for log in error_logs[:10]:
+                timestamp = log.get('timestamp', '')[:16].replace('T', ' ')
+                msg_type = log.get('type', '')
+                message = log.get('message', '')[:100]
+                
+                msg += f"• [{timestamp}] {msg_type}\n"
+                msg += f"  {message}\n\n"
+        
+        # Последние 5 записей всех типов
+        msg += f"📝 Последние записи:\n\n"
+        for log in logs[:5]:
+            timestamp = log.get('timestamp', '')[:16].replace('T', ' ')
+            msg_type = log.get('type', '')
+            message = log.get('message', '')[:80]
+            
+            msg += f"[{timestamp}] {msg_type}: {message}\n"
+        
+        await status_msg.edit_text(msg)
+        
+    except Exception as e:
+        await status_msg.edit_text(f"❌ Ошибка загрузки логов: {str(e)}")
 
-
+async def health_check_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Проверка доступности сервиса"""
+    
+    if not check_access(update.effective_user.id):
+        return
+    
+    status_msg = await update.message.reply_text("🔍 Проверяю доступность сервиса...")
+    
+    try:
+        start_time = time.time()
+        result = apps_script_request('health', 'GET')
+        response_time = int((time.time() - start_time) * 1000)
+        
+        if isinstance(result, dict) and result.get('status') == 'ok':
+            await status_msg.edit_text(
+                f"✅ Сервис доступен!\n\n"
+                f"⏱ Время ответа: {response_time} мс\n"
+                f"🕐 Серверное время: {result.get('timestamp', 'N/A')[:19].replace('T', ' ')}"
+            )
+        else:
+            await status_msg.edit_text(f"⚠️ Сервис ответил странно: {result}")
+            
+    except Exception as e:
+        await status_msg.edit_text(
+            f"❌ Сервис недоступен!\n\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"Возможно, Apps Script упал или превышен лимит запросов."
+        )
+    # Автоматическая проверка доступности раз в час
+    async def periodic_health_check(context):
+        try:
+            result = apps_script_request('health', 'GET')
+            
+            if not isinstance(result, dict) or result.get('status') != 'ok':
+                # Сервис недоступен - отправляем уведомление админу
+                admin_id = ADMIN_ID  # Замени на свой ID
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=f"⚠️ ВНИМАНИЕ: Сервис недоступен!\n\n"
+                         f"Последняя проверка: {datetime.now().strftime('%H:%M:%S')}\n"
+                         f"Ответ: {result}"
+                )
+        except Exception as e:
+            admin_id = ADMIN_ID
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=f"🚨 КРИТИЧЕСКАЯ ОШИБКА: Сервис не отвечает!\n\n"
+                     f"Ошибка: {str(e)}"
+            )
+    
+    # Запускаем проверку раз в час (3600 секунд)
+    context = application.create_application_callback_context()
+    application.job_queue.run_repeating(periodic_health_check, interval=3600*12, first=60)
 # ===== ЗАПУСК =====
 def main():
     """Запуск бота"""
@@ -1378,6 +1479,8 @@ def main():
     application.add_handler(CommandHandler("fix_hashtags", fix_hashtags_command))
     application.add_handler(CommandHandler("fix_playlists", fix_playlists_command))
     application.add_handler(CommandHandler("fix_pending", fix_pending_command))
+    application.add_handler(CommandHandler("logs", logs_command))
+    application.add_handler(CommandHandler("health", health_check_command))
     # Обработка файлов со ссылками (ПЕРЕД текстовым хендлером!)
     application.add_handler(MessageHandler(
         filters.Document.ALL,
