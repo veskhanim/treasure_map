@@ -1834,7 +1834,6 @@ async function toggleVideoProgress(videoId) {
         newEn = true;
     }
     
-    // Обновляем локально
     video.watchedOriginal = newOriginal;
     video.watchedRu = newRu;
     video.watchedEn = newEn;
@@ -1847,8 +1846,8 @@ async function toggleVideoProgress(videoId) {
             watchedEn: newEn
         }, { id: videoId });
         
-        // Перерисовываем только текущий вид БЕЗ сброса фильтров
-        renderCurrentView();
+        // Перерисовываем с сохранением фильтров
+        renderVideos(getFilteredVideos());
         
         if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     } catch (error) {
@@ -1856,6 +1855,7 @@ async function toggleVideoProgress(videoId) {
         alert('Не удалось сохранить прогресс');
     }
 }
+    
 function renderVideoCard(video, controlsHtml) {
     // Универсальное получение ID видео (пробуем разные названия полей)
     const videoId = video.id || video.video_id || video.youtube_id || '';
@@ -2906,8 +2906,8 @@ async function deleteVideoFromEdit() {
         
         closeEditModal();
         
-        // Перерисовываем текущий вид БЕЗ сброса фильтров
-        renderCurrentView();
+        // Перерисовываем с сохранением фильтров
+        renderVideos(getFilteredVideos());
         
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } catch (error) {
