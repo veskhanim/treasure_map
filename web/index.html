@@ -1814,9 +1814,9 @@ async function toggleVideoProgress(videoId) {
     const video = videos.find(v => v.id === videoId);
     if (!video) return;
     
-    const watchedOriginal = video.watched_original === true || video.watched_original === 'true';
-    const watchedRu = video.watched_ru === true || video.watched_ru === 'true';
-    const watchedEn = video.watched_en === true || video.watched_en === 'true';
+    const watchedOriginal = String(video.watchedOriginal).toLowerCase() === 'true';
+    const watchedRu = String(video.watchedRu).toLowerCase() === 'true';
+    const watchedEn = String(video.watchedEn).toLowerCase() === 'true';
     
     let newOriginal = watchedOriginal;
     let newRu = watchedRu;
@@ -1834,19 +1834,28 @@ async function toggleVideoProgress(videoId) {
         newEn = true;
     }
     
-    video.watched_original = newOriginal;
-    video.watched_ru = newRu;
-    video.watched_en = newEn;
+    // Обновляем локально
+    video.watchedOriginal = newOriginal;
+    video.watchedRu = newRu;
+    video.watchedEn = newEn;
     
     try {
-        await apiRequest('videos', 'PUT', video, { id: videoId });
-        await loadData();
+        await apiRequest('videos', 'PUT', {
+            id: videoId,
+            watchedOriginal: newOriginal,
+            watchedRu: newRu,
+            watchedEn: newEn
+        }, { id: videoId });
+        
+        // Перерисовываем только текущий вид БЕЗ сброса фильтров
+        renderCurrentView();
+        
         if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     } catch (error) {
         console.error('Ошибка:', error);
+        alert('Не удалось сохранить прогресс');
     }
 }
-
 function renderVideoCard(video, controlsHtml) {
     // Универсальное получение ID видео (пробуем разные названия полей)
     const videoId = video.id || video.video_id || video.youtube_id || '';
@@ -1966,19 +1975,58 @@ function renderVideoCard(video, controlsHtml) {
     `;
 }
 
-function renderVideos(filteredVideos) {
-    const videoList = document.getElementById('videoList');
-    videoList.innerHTML = '';
+function renderVideos() {
+    const container = document.getElementById('videosList');
+    if (!container) return;
     
-    filteredVideos.forEach(video => {
-        const card = document.createElement('div');
-        card.className = 'video-card';
-        card.innerHTML = renderVideoCard(video);
-        videoList.appendChild(card);
+    // Используем глобальные переменные фильтров (они не сбрасываются)
+    let filteredVideos = [...videos];
+    
+    // Применяем фильтры
+    if (currentSearch) {
+        filteredVideos = filteredVideos.filter(v => 
+            v.title && v.title.toLowerCase().includes(currentSearch.toLowerCase())
+        );
+    }
+    
+    if (currentCategory) {
+        filteredVideos = filteredVideos.filter(v => v.category === currentCategory);
+    }
+    
+    if (currentChannel) {
+        filteredVideos = filteredVideos.filter(v => v.channel_id === currentChannel);
+    }
+    
+    // Сортировка
+    filteredVideos.sort((a, b) => {
+        const dateA = parseDate(a.date);
+        const dateB = parseDate(b.date);
+        return sortAscending ? dateA - dateB : dateB - dateA;
     });
     
+    // Пагинация
+    const videosToShow = filteredVideos.slice(0, displayLimit);
+    
+    container.innerHTML = videosToShow.map(video => `
+        <div class="video-card">
+            ${renderVideoCard(video)}
+        </div>
+    `).join('');
+    
+    // Обновляем счётчик
     document.getElementById('resultsCount').textContent = `Найдено: ${filteredVideos.length}`;
-    document.getElementById('emptyState').classList.toggle('visible', filteredVideos.length === 0);
+    
+    // Кнопка "Показать ещё"
+    const remaining = filteredVideos.length - displayLimit;
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    if (loadMoreBtn) {
+        if (remaining > 0) {
+            loadMoreBtn.style.display = 'block';
+            document.getElementById('remainingCount').textContent = remaining;
+        } else {
+            loadMoreBtn.style.display = 'none';
+        }
+    }
 }
 
 function renderPlaylists() {
@@ -2848,13 +2896,19 @@ async function deleteVideoFromEdit() {
     try {
         const result = await apiRequest('videos', 'DELETE', null, { id: editingVideoId });
         
-        if (result.error) {
+        if (result && result.error) {
             alert('Ошибка: ' + result.error);
             return;
         }
         
+        // Удаляем из локального массива
+        videos = videos.filter(v => v.id !== editingVideoId);
+        
         closeEditModal();
-        await loadData();
+        
+        // Перерисовываем текущий вид БЕЗ сброса фильтров
+        renderCurrentView();
+        
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } catch (error) {
         alert('Ошибка при удалении: ' + error.message);
@@ -2863,7 +2917,27 @@ async function deleteVideoFromEdit() {
         deleteBtn.disabled = false;
     }
 }
-
+    
+function renderCurrentView() {
+    // Определяем текущую активную вкладку
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (!activeTab) return;
+    
+    const tabId = activeTab.dataset.tab;
+    
+    // Перерисовываем только текущую вкладку
+    if (tabId === 'map') {
+        renderVideos();
+    } else if (tabId === 'new-videos') {
+        renderPendingVideos();
+    } else if (tabId === 'playlists') {
+        renderPlaylists();
+    }
+    
+    // Обновляем счётчики
+    updateCounters();
+}
+    
 function openAddToPlaylistModal(playlistId) {
     currentPlaylistIdForAdd = playlistId;
     document.getElementById('playlistVideoSearch').value = '';
