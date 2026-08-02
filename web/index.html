@@ -1838,7 +1838,6 @@ async function toggleVideoProgress(videoId) {
     video.watchedRu = newRu;
     video.watchedEn = newEn;
     
-   // В toggleVideoProgress:
     try {
         await apiRequest('videos', 'PUT', {
             id: videoId,
@@ -1847,17 +1846,8 @@ async function toggleVideoProgress(videoId) {
             watchedEn: newEn
         }, { id: videoId });
         
-        // Обновляем локально
-        video.watchedOriginal = newOriginal;
-        video.watchedRu = newRu;
-        video.watchedEn = newEn;
-        
-        // Перерисовываем с сохранением фильтров
-        if (typeof getFilteredVideos === 'function') {
-            renderVideos(getFilteredVideos());
-        } else {
-            renderVideos();
-        }
+        // Просто перезагружаем данные (фильтры сохранятся в переменных)
+        await loadData();
         
         if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     } catch (error) {
@@ -2893,8 +2883,8 @@ async function deleteVideoFromEdit() {
     if (!video) return;
     
     const confirmed = tg.showConfirm 
-        ? await new Promise(resolve => tg.showConfirm(`Удалить видео "${video.title}"?\n\nЭто действие нельзя отменить.`, resolve))
-        : confirm(`Удалить видео "${video.title}"?\n\nЭто действие нельзя отменить.`);
+        ? await new Promise(resolve => tg.showConfirm(`Удалить видео "${video.title}"?`, resolve))
+        : confirm(`Удалить видео "${video.title}"?`);
     
     if (!confirmed) return;
     
@@ -2903,7 +2893,6 @@ async function deleteVideoFromEdit() {
     deleteBtn.textContent = 'Удаление...';
     deleteBtn.disabled = true;
     
-   // В deleteVideoFromEdit:
     try {
         const result = await apiRequest('videos', 'DELETE', null, { id: editingVideoId });
         
@@ -2912,21 +2901,17 @@ async function deleteVideoFromEdit() {
             return;
         }
         
-        // Удаляем из локального массива
-        videos = videos.filter(v => v.id !== editingVideoId);
-        
         closeEditModal();
         
-        // Перерисовываем с сохранением фильтров
-        if (typeof getFilteredVideos === 'function') {
-            renderVideos(getFilteredVideos());
-        } else {
-            renderVideos();
-        }
+        // Просто перезагружаем данные
+        await loadData();
         
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } catch (error) {
         alert('Ошибка при удалении: ' + error.message);
+    } finally {
+        deleteBtn.textContent = originalText;
+        deleteBtn.disabled = false;
     }
 }
     
