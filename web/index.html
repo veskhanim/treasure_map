@@ -1838,6 +1838,7 @@ async function toggleVideoProgress(videoId) {
     video.watchedRu = newRu;
     video.watchedEn = newEn;
     
+   // В toggleVideoProgress:
     try {
         await apiRequest('videos', 'PUT', {
             id: videoId,
@@ -1846,8 +1847,17 @@ async function toggleVideoProgress(videoId) {
             watchedEn: newEn
         }, { id: videoId });
         
+        // Обновляем локально
+        video.watchedOriginal = newOriginal;
+        video.watchedRu = newRu;
+        video.watchedEn = newEn;
+        
         // Перерисовываем с сохранением фильтров
-        renderVideos(getFilteredVideos());
+        if (typeof getFilteredVideos === 'function') {
+            renderVideos(getFilteredVideos());
+        } else {
+            renderVideos();
+        }
         
         if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
     } catch (error) {
@@ -2893,6 +2903,7 @@ async function deleteVideoFromEdit() {
     deleteBtn.textContent = 'Удаление...';
     deleteBtn.disabled = true;
     
+   // В deleteVideoFromEdit:
     try {
         const result = await apiRequest('videos', 'DELETE', null, { id: editingVideoId });
         
@@ -2907,14 +2918,15 @@ async function deleteVideoFromEdit() {
         closeEditModal();
         
         // Перерисовываем с сохранением фильтров
-        renderVideos(getFilteredVideos());
+        if (typeof getFilteredVideos === 'function') {
+            renderVideos(getFilteredVideos());
+        } else {
+            renderVideos();
+        }
         
         if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
     } catch (error) {
         alert('Ошибка при удалении: ' + error.message);
-    } finally {
-        deleteBtn.textContent = originalText;
-        deleteBtn.disabled = false;
     }
 }
     
