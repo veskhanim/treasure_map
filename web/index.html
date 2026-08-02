@@ -2036,7 +2036,7 @@ function renderPlaylists() {
     container.innerHTML = playlists.map(playlist => {
         const previewVideos = playlist.video_ids.slice(0, 3).map(vid => {
             const video = videos.find(v => v.id === vid);
-            return video ? `<div class="playlist-preview-thumb"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" alt=""></div>` : '';
+            return video ? '<div class="playlist-preview-thumb"><img src="https://img.youtube.com/vi/${vid}/hqdefault.jpg" alt=""></div>' : '';
         }).join('');
         
         const typeBadge = playlist.type === 'dynamic' 
