@@ -2919,23 +2919,50 @@ async function deleteVideoFromEdit() {
 }
     
 function renderCurrentView() {
-    // Определяем текущую активную вкладку
+    console.log(' renderCurrentView вызвана');
+    
     const activeTab = document.querySelector('.tab-btn.active');
-    if (!activeTab) return;
-    
-    const tabId = activeTab.dataset.tab;
-    
-    // Перерисовываем только текущую вкладку
-    if (tabId === 'map') {
-        renderVideos();
-    } else if (tabId === 'new-videos') {
-        renderPendingVideos();
-    } else if (tabId === 'playlists') {
-        renderPlaylists();
+    if (!activeTab) {
+        console.error('❌ Активная вкладка не найдена');
+        return;
     }
     
-    // Обновляем счётчики
-    updateCounters();
+    const tabId = activeTab.dataset.tab;
+    console.log(' Активная вкладка:', tabId);
+    
+    try {
+        if (tabId === 'map') {
+            console.log(' Рендерим вкладку Карта...');
+            if (typeof renderVideos === 'function') {
+                renderVideos();
+                console.log('✅ Карта отрендерена');
+            } else {
+                console.error('❌ Функция renderVideos не найдена!');
+            }
+        } else if (tabId === 'new-videos') {
+            console.log('🎨 Рендерим вкладку Сети...');
+            if (typeof renderPendingVideos === 'function') {
+                renderPendingVideos();
+                console.log('✅ Сети отрендерены');
+            } else {
+                console.error('❌ Функция renderPendingVideos не найдена!');
+            }
+        } else if (tabId === 'playlists') {
+            console.log('🎨 Рендерим вкладку Плейлисты...');
+            if (typeof renderPlaylists === 'function') {
+                renderPlaylists();
+                console.log('✅ Плейлисты отрендерены');
+            } else {
+                console.error('❌ Функция renderPlaylists не найдена!');
+            }
+        }
+        
+        if (typeof updateCounters === 'function') {
+            updateCounters();
+        }
+    } catch (error) {
+        console.error('❌ Ошибка в renderCurrentView:', error);
+    }
 }
     
 function openAddToPlaylistModal(playlistId) {
