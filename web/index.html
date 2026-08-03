@@ -3104,34 +3104,6 @@ function updateCategoryDropdown() {
     });
 }
 
-function switchTab(tabName, el) {
-    currentTab = tabName;
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.getElementById(`tab-${tabName}`).classList.add('active');
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    if (el) el.classList.add('active');
-    
-    const searchContainer = document.getElementById('searchContainer');
-    
-    if (tabName === 'translations' || tabName === 'playlists') {
-        searchContainer.style.display = 'none';
-    } else {
-        searchContainer.style.display = 'flex';
-    }
-    
-    if (tabName === 'new-videos') {
-        renderPendingVideos();
-    }
-    if (tabName === 'playlists') {
-        renderPlaylists();
-    }
-    if (tabName === 'translations') {
-        renderTeamChannels();
-    }
-    
-    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
-}
-
 let sortAscending = false; // false = сначала новые, true = сначала старые
 
 function toggleSort() {
