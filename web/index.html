@@ -1305,113 +1305,129 @@
             border-color: #ea4335 !important;
         }
         .modal-btn.delete:active { transform: scale(0.95); }
+        /* Календарь */
         .calendar-filters {
             display: flex;
-            gap: 10px;
-            margin-bottom: 16px;
-            padding: 0 16px;
+            gap: 6px;
+            padding: 8px;
+            flex-wrap: wrap;
         }
         .filter-select {
             flex: 1;
-            padding: 10px 12px;
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 8px;
+            min-width: 100px;
+            padding: 6px 8px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
             color: var(--white);
-            font-size: 14px;
+            font-size: 12px;
             outline: none;
         }
-        .calendar-header {
+        .calendar-selector {
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 16px;
-            background: rgba(255,107,0,0.1);
-            border-radius: 12px;
-            margin: 0 16px 16px;
+            gap: 6px;
+            padding: 8px;
         }
-        .calendar-title {
-            font-size: 20px;
-            font-weight: 700;
+        .calendar-selector select {
+            flex: 1;
+            padding: 8px;
+            background: rgba(255,107,0,0.2);
+            border: 1px solid rgba(255,107,0,0.4);
+            border-radius: 6px;
             color: var(--white);
-            text-transform: capitalize;
+            font-size: 13px;
+            font-weight: 600;
+            outline: none;
         }
-        .calendar-nav {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: var(--white);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .calendar-nav:active { background: rgba(255,107,0,0.3); }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            gap: 4px;
-            padding: 16px;
+            gap: 2px;
+            padding: 4px 8px;
         }
         .calendar-day-header {
             text-align: center;
-            font-size: 12px;
-            font-weight: 600;
+            font-size: 10px;
+            font-weight: 700;
             color: var(--text-dim);
-            padding: 8px 0;
+            padding: 4px 0;
+        }
+        .calendar-day-header.weekend {
+            color: var(--orange);
         }
         .calendar-day {
             aspect-ratio: 1;
             background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            padding: 4px;
+            border-radius: 4px;
+            padding: 2px;
             cursor: pointer;
             position: relative;
             transition: all 0.2s;
-            min-height: 60px;
+            min-height: 36px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
         }
         .calendar-day:hover { background: rgba(255,255,255,0.1); }
         .calendar-day.active {
             background: rgba(255,107,0,0.3);
-            border: 2px solid var(--orange);
+            border: 1px solid var(--orange);
         }
-        .calendar-day.today { border: 2px solid var(--sand); }
+        .calendar-day.today {
+            border: 1px solid var(--sand);
+            background: rgba(232,152,91,0.2);
+        }
+        .calendar-day.has-events {
+            background: rgba(255,107,0,0.25);
+        }
+        .calendar-day.anniversary {
+            background: rgba(255,215,0,0.3);
+            border: 1px solid gold;
+        }
+        .calendar-day.atiny-day {
+            background: rgba(138,43,226,0.3);
+            border: 1px solid #8a2be2;
+        }
         .calendar-day-number {
-            font-size: 12px;
-            font-weight: 600;
+            font-size: 10px;
+            font-weight: 700;
             color: var(--white);
-            margin-bottom: 2px;
+            line-height: 1;
         }
         .calendar-day-count {
-            font-size: 10px;
+            font-size: 8px;
             color: var(--text-dim);
+            margin-top: 1px;
         }
-        .calendar-day.has-events { background: rgba(255,107,0,0.2); }
+        .calendar-day-event-icon {
+            font-size: 8px;
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+        }
         .calendar-day-modal {
-            max-width: 500px;
+            max-width: 90vw;
             max-height: 80vh;
             overflow-y: auto;
         }
-        .day-modal-content { padding: 16px 0; }
+        .day-modal-content { padding: 12px 0; }
         .day-event {
             background: rgba(255,255,255,0.05);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 8px;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 6px;
             cursor: pointer;
             transition: all 0.2s;
         }
         .day-event:hover { background: rgba(255,255,255,0.1); }
         .day-event-title {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--white);
-            margin-bottom: 4px;
+            margin-bottom: 3px;
         }
         .day-event-meta {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-dim);
         }
         @media (max-width: 360px) {
@@ -1789,6 +1805,27 @@
 
             <!-- Вкладка Календарь -->
             <div class="tab-content" id="tab-calendar">
+                <!-- Селекторы месяца и года -->
+                <div class="calendar-selector">
+                    <select id="calendarMonthSelect" onchange="changeCalendarMonth()">
+                        <option value="0">Январь</option>
+                        <option value="1">Февраль</option>
+                        <option value="2">Март</option>
+                        <option value="3">Апрель</option>
+                        <option value="4">Май</option>
+                        <option value="5">Июнь</option>
+                        <option value="6">Июль</option>
+                        <option value="7">Август</option>
+                        <option value="8">Сентябрь</option>
+                        <option value="9">Октябрь</option>
+                        <option value="10">Ноябрь</option>
+                        <option value="11">Декабрь</option>
+                    </select>
+                    <select id="calendarYearSelect" onchange="changeCalendarMonth()">
+                    </select>
+                </div>
+                
+                <!-- Фильтры -->
                 <div class="calendar-filters">
                     <select id="calendarMemberFilter" class="filter-select" onchange="renderCalendar()">
                         <option value="all">Все участники</option>
@@ -1810,16 +1847,11 @@
                         <option value="WANTEEZ">WANTEEZ</option>
                     </select>
                 </div>
-                <div class="calendar-header">
-                    <button class="calendar-nav" onclick="changeMonth(-1)">
-                        <svg class="icon"><use href="#i-chevron-left"/></svg>
-                    </button>
-                    <div class="calendar-title" id="calendarTitle">Июль 2026</div>
-                    <button class="calendar-nav" onclick="changeMonth(1)">
-                        <svg class="icon"><use href="#i-chevron-right"/></svg>
-                    </button>
-                </div>
+                
+                <!-- Сетка календаря -->
                 <div class="calendar-grid" id="calendarGrid"></div>
+                
+                <!-- Модальное окно дня -->
                 <div class="modal-overlay" id="dayModal">
                     <div class="modal-content calendar-day-modal">
                         <div class="modal-header">
@@ -1832,7 +1864,6 @@
                     </div>
                 </div>
             </div>
-        </div>
 
         <nav class="bottom-nav">
             <div class="dune dune-1"></div>
@@ -1941,7 +1972,10 @@
                 console.log('✅ Данные загружены');
                 if (currentTab === 'map') renderVideos();
                 else if (currentTab === 'new-videos') renderPendingVideos();
-                else if (currentTab === 'calendar') renderCalendar();
+                else if (currentTab === 'calendar') {
+                    initCalendarSelectors();
+                    renderCalendar();
+                }
             } catch (error) {
                 console.error('❌ Ошибка загрузки:', error);
             }
@@ -1955,46 +1989,122 @@
             }
         }
 
-        function changeMonth(delta) {
-            currentCalendarMonth += delta;
-            if (currentCalendarMonth > 11) {
-                currentCalendarMonth = 0;
-                currentCalendarYear++;
-            } else if (currentCalendarMonth < 0) {
-                currentCalendarMonth = 11;
-                currentCalendarYear--;
+        // Глобальные переменные календаря
+        let eventsData = [];
+        let currentCalendarDate = new Date();
+        let currentCalendarYear = currentCalendarDate.getFullYear();
+        let currentCalendarMonth = currentCalendarDate.getMonth();
+        
+        // Заполняем селектор года (от 2018 до 2030)
+        function initCalendarSelectors() {
+            const yearSelect = document.getElementById('calendarYearSelect');
+            const monthSelect = document.getElementById('calendarMonthSelect');
+            
+            if (yearSelect && yearSelect.options.length === 0) {
+                for (let y = 2018; y <= 2030; y++) {
+                    const opt = document.createElement('option');
+                    opt.value = y;
+                    opt.textContent = y;
+                    yearSelect.appendChild(opt);
+                }
             }
+            
+            if (yearSelect) yearSelect.value = currentCalendarYear;
+            if (monthSelect) monthSelect.value = currentCalendarMonth;
+        }
+        
+        // Изменение месяца/года через селекторы
+        function changeCalendarMonth() {
+            const yearSelect = document.getElementById('calendarYearSelect');
+            const monthSelect = document.getElementById('calendarMonthSelect');
+            if (yearSelect) currentCalendarYear = parseInt(yearSelect.value);
+            if (monthSelect) currentCalendarMonth = parseInt(monthSelect.value);
             renderCalendar();
         }
-
+        
+       
+        
+        // Загрузка событий
+        async function loadEvents() {
+            try {
+                eventsData = await apiRequest('events', 'GET') || [];
+                // Добавляем авто-генерируемые годовщины
+                console.log('✅ Events loaded:', eventsData.length, '(включая', anniversaries.length, 'годовщин)');
+            } catch (e) {
+                console.error(' Error loading events:', e);
+                eventsData = [];
+            }
+        }
+        
+        // Рендер календаря (понедельник первый)
         function renderCalendar() {
             const grid = document.getElementById('calendarGrid');
-            const title = document.getElementById('calendarTitle');
             if (!grid) return;
-            const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-            const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
-            title.textContent = `${monthNames[currentCalendarMonth]} ${currentCalendarYear}`;
-            const memberFilter = document.getElementById('calendarMemberFilter').value;
-            const categoryFilter = document.getElementById('calendarCategoryFilter').value;
-            let html = dayNames.map(day => `<div class="calendar-day-header">${day}</div>`).join('');
+            
+            // Обновляем селекторы
+            initCalendarSelectors();
+            
+            const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+            
+            // Заголовки дней недели
+            let html = dayNames.map((day, idx) => 
+                `<div class="calendar-day-header ${idx >= 5 ? 'weekend' : ''}">${day}</div>`
+            ).join('');
+            
+            // Первый день месяца
             const firstDay = new Date(currentCalendarYear, currentCalendarMonth, 1);
             const lastDay = new Date(currentCalendarYear, currentCalendarMonth + 1, 0);
-            const startingDay = firstDay.getDay();
+            
+            // Смещение для понедельника (0=вс, 1=пн ... 6=сб)
+            // Превращаем: вс=6, пн=0, вт=1, ... сб=5
+            let startingDay = firstDay.getDay() - 1;
+            if (startingDay < 0) startingDay = 6;
+            
+            // Пустые ячейки до первого дня
             for (let i = 0; i < startingDay; i++) {
                 html += `<div></div>`;
             }
+            
+            // Фильтры
+            const memberFilter = document.getElementById('calendarMemberFilter').value;
+            const categoryFilter = document.getElementById('calendarCategoryFilter').value;
+            
             const today = new Date();
+            
+            // Дни месяца
             for (let day = 1; day <= lastDay.getDate(); day++) {
                 const dateStr = `${String(day).padStart(2,'0')}.${String(currentCalendarMonth + 1).padStart(2,'0')}.${currentCalendarYear}`;
+                
                 const dayVideos = getVideosForDate(dateStr, memberFilter, categoryFilter);
                 const dayEvents = getEventsForDate(dateStr, memberFilter);
                 const totalCount = dayVideos.length + dayEvents.length;
-                const isToday = today.getDate() === day && today.getMonth() === currentCalendarMonth && today.getFullYear() === currentCalendarYear;
+                
+                const isToday = today.getDate() === day && 
+                               today.getMonth() === currentCalendarMonth && 
+                               today.getFullYear() === currentCalendarYear;
+                
+                // Проверяем особые даты
+                let specialClass = '';
+                let eventIcon = '';
+                dayEvents.forEach(ev => {
+                    if (ev.isAnniversary) { specialClass = 'anniversary'; eventIcon = ''; }
+                    if (ev.isAtinyDay) { specialClass = 'atiny-day'; eventIcon = '💜'; }
+                });
+                
                 let dayClass = 'calendar-day';
                 if (isToday) dayClass += ' today';
-                if (totalCount > 0) dayClass += ' has-events';
-                html += `<div class="${dayClass}" onclick="openDayModal('${dateStr}')"><div class="calendar-day-number">${day}</div>${totalCount > 0 ? `<div class="calendar-day-count">${totalCount}</div>` : ''}</div>`;
+                if (specialClass) dayClass += ' ' + specialClass;
+                else if (totalCount > 0) dayClass += ' has-events';
+                
+                html += `
+                    <div class="${dayClass}" onclick="openDayModal('${dateStr}')">
+                        <div class="calendar-day-number">${day}</div>
+                        ${totalCount > 0 ? `<div class="calendar-day-count">${totalCount}</div>` : ''}
+                        ${eventIcon ? `<div class="calendar-day-event-icon">${eventIcon}</div>` : ''}
+                    </div>
+                `;
             }
+            
             grid.innerHTML = html;
         }
 
@@ -2025,32 +2135,71 @@
             const title = document.getElementById('dayModalTitle');
             const content = document.getElementById('dayModalContent');
             if (!modal || !title || !content) return;
+            
             const [day, month, year] = dateStr.split('.');
-            const monthNames = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+            const monthNames = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                               'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
             title.textContent = `${day} ${monthNames[parseInt(month) - 1]} ${year}`;
+            
             const memberFilter = document.getElementById('calendarMemberFilter').value;
             const categoryFilter = document.getElementById('calendarCategoryFilter').value;
+            
             const dayVideos = getVideosForDate(dateStr, memberFilter, categoryFilter);
             const dayEvents = getEventsForDate(dateStr, memberFilter);
+            
             let html = '';
-            if (dayEvents.length > 0) {
+            
+            // Особые события (годовщины)
+            const specialEvents = dayEvents.filter(e => e.isAnniversary || e.isAtinyDay);
+            const regularEvents = dayEvents.filter(e => !e.isAnniversary && !e.isAtinyDay);
+            
+            if (specialEvents.length > 0) {
+                html += '<div style="margin-bottom:16px;">';
+                specialEvents.forEach(event => {
+                    const bgColor = event.isAnniversary ? 'rgba(255,215,0,0.2)' : 'rgba(138,43,226,0.2)';
+                    const borderColor = event.isAnniversary ? 'gold' : '#8a2be2';
+                    html += `
+                        <div class="day-event" style="background:${bgColor};border:1px solid ${borderColor};">
+                            <div class="day-event-title">${event.title}</div>
+                            <div class="day-event-meta">${event.description}</div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+            
+            // Обычные события
+            if (regularEvents.length > 0) {
                 html += '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--orange);margin-bottom:8px;font-weight:700;">📅 СОБЫТИЯ</div>';
-                dayEvents.forEach(event => {
-                    const eventVideos = getVideosFromEvent(event);
-                    html += `<div class="day-event"><div class="day-event-title">${event.title || 'Событие'}</div>${event.description ? `<div style="font-size:12px;color:var(--text-dim);margin:4px 0;">${event.description}</div>` : ''}${eventVideos.length > 0 ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1);"><div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;">🎥 Видео (${eventVideos.length}):</div>${eventVideos.map(v => `<div style="font-size:12px;color:var(--white);padding:4px 0;cursor:pointer;" onclick="openEditModal('${v.id}')">• ${v.title || 'Без названия'}</div>`).join('')}</div>` : ''}</div>`;
+                regularEvents.forEach(event => {
+                    html += `
+                        <div class="day-event">
+                            <div class="day-event-title">${event.title || 'Событие'}</div>
+                            ${event.description ? `<div style="font-size:12px;color:var(--text-dim);margin:4px 0;">${event.description}</div>` : ''}
+                        </div>
+                    `;
                 });
                 html += '</div>';
             }
+            
+            // Видео
             if (dayVideos.length > 0) {
-                html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;"> ВИДЕО</div>';
+                html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;">🎥 ВИДЕО (' + dayVideos.length + ')</div>';
                 dayVideos.forEach(video => {
-                    html += `<div class="day-event" onclick="openEditModal('${video.id}')"><div class="day-event-title">${video.title || 'Без названия'}</div><div class="day-event-meta">${video.category || ''} • ${video.members ? video.members.join(', ') : ''}</div></div>`;
+                    html += `
+                        <div class="day-event" onclick="openEditModal('${video.id}')">
+                            <div class="day-event-title">${video.title || 'Без названия'}</div>
+                            <div class="day-event-meta">${video.category || ''} • ${video.members ? video.members.join(', ') : ''}</div>
+                        </div>
+                    `;
                 });
                 html += '</div>';
             }
+            
             if (dayVideos.length === 0 && dayEvents.length === 0) {
                 html = '<div style="text-align:center;color:var(--text-dim);padding:40px;">Нет событий за этот день</div>';
             }
+            
             content.innerHTML = html;
             modal.classList.add('visible');
             if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
@@ -2077,7 +2226,10 @@
             if (tabName === 'map') renderVideos();
             if (tabName === 'new-videos') renderPendingVideos();
             if (tabName === 'playlists') renderPlaylists();
-            if (tabName === 'calendar') renderCalendar();
+            if (tabName === 'calendar') {
+                initCalendarSelectors();
+                renderCalendar();
+            }
             if (tabName === 'translations') renderTeamChannels();
             if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
         }
