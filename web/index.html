@@ -2073,13 +2073,13 @@ function openDayModal(dateStr) {
     const title = document.getElementById('dayModalTitle');
     const content = document.getElementById('dayModalContent');
     
-    if (!modal  !title  !content) return;
+    if (!modal || !title || !content) return;
     
     const [day, month, year] = dateStr.split('.');
     const monthNames = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
                        'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     
-    title.textContent = ${day} ${monthNames[parseInt(month) - 1]} ${year};
+    title.textContent = '${day} ${monthNames[parseInt(month) - 1]} ${year}';
     
     const memberFilter = document.getElementById('calendarMemberFilter').value;
     const categoryFilter = document.getElementById('calendarCategoryFilter').value;
