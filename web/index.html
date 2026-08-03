@@ -1802,6 +1802,7 @@
                 </div>
                 <div class="channels-list" id="teamChannelsList"></div>
             </div>
+        </div>
 
             <!-- Вкладка Календарь -->
             <div class="tab-content" id="tab-calendar">
@@ -2145,33 +2146,14 @@
             
             let html = '';
             
-            // Особые события (годовщины)
-            const specialEvents = dayEvents.filter(e => e.isAnniversary || e.isAtinyDay);
-            const regularEvents = dayEvents.filter(e => !e.isAnniversary && !e.isAtinyDay);
-            
-            if (specialEvents.length > 0) {
-                html += '<div style="margin-bottom:16px;">';
-                specialEvents.forEach(event => {
-                    const bgColor = event.isAnniversary ? 'rgba(255,215,0,0.2)' : 'rgba(138,43,226,0.2)';
-                    const borderColor = event.isAnniversary ? 'gold' : '#8a2be2';
-                    html += `
-                        <div class="day-event" style="background:${bgColor};border:1px solid ${borderColor};">
-                            <div class="day-event-title">${event.title}</div>
-                            <div class="day-event-meta">${event.description}</div>
-                        </div>
-                    `;
-                });
-                html += '</div>';
-            }
-            
-            // Обычные события
-            if (regularEvents.length > 0) {
+            // События
+            if (dayEvents.length > 0) {
                 html += '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--orange);margin-bottom:8px;font-weight:700;">📅 СОБЫТИЯ</div>';
-                regularEvents.forEach(event => {
+                dayEvents.forEach(event => {
                     html += `
                         <div class="day-event">
                             <div class="day-event-title">${event.title || 'Событие'}</div>
-                            ${event.description ? `<div style="font-size:12px;color:var(--text-dim);margin:4px 0;">${event.description}</div>` : ''}
+                            <div class="day-event-meta">${event.description || ''}</div>
                         </div>
                     `;
                 });
@@ -2180,7 +2162,7 @@
             
             // Видео
             if (dayVideos.length > 0) {
-                html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;">🎥 ВИДЕО (' + dayVideos.length + ')</div>';
+                html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;"> ВИДЕО</div>';
                 dayVideos.forEach(video => {
                     html += `
                         <div class="day-event" onclick="openEditModal('${video.id}')">
