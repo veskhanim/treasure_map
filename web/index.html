@@ -1315,6 +1315,149 @@
             transform: scale(0.95);
         }
 
+        /* Календарь */
+        .calendar-filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding: 0 16px;
+        }
+        
+        .filter-select {
+            flex: 1;
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: var(--white);
+            font-size: 14px;
+            outline: none;
+        }
+        
+        .calendar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: rgba(255,107,0,0.1);
+            border-radius: 12px;
+            margin: 0 16px 16px;
+        }
+        
+        .calendar-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--white);
+            text-transform: capitalize;
+        }
+        
+        .calendar-nav {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: var(--white);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .calendar-nav:active {
+            background: rgba(255,107,0,0.3);
+        }
+        
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            padding: 16px;
+        }
+        
+        .calendar-day-header {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-dim);
+            padding: 8px 0;
+        }
+        
+        .calendar-day {
+            aspect-ratio: 1;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 4px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+            min-height: 60px;
+        }
+        
+        .calendar-day:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .calendar-day.active {
+            background: rgba(255,107,0,0.3);
+            border: 2px solid var(--orange);
+        }
+        
+        .calendar-day.today {
+            border: 2px solid var(--sand);
+        }
+        
+        .calendar-day-number {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--white);
+            margin-bottom: 2px;
+        }
+        
+        .calendar-day-count {
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+        
+        .calendar-day.has-events {
+            background: rgba(255,107,0,0.2);
+        }
+        
+        .calendar-day-modal {
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .day-modal-content {
+            padding: 16px 0;
+        }
+        
+        .day-event {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .day-event:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        
+        .day-event-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--white);
+            margin-bottom: 4px;
+        }
+        
+        .day-event-meta {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
         @media (max-width: 360px) {
             .video-thumbnail { width: 120px; min-width: 120px; height: 68px; }
             .video-title { font-size: 11px; }
@@ -1327,6 +1470,18 @@
 <div class="app-container">
 
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-calendar" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/>
+        <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="2"/>
+        <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" stroke-width="2"/>
+        <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-chevron-left" viewBox="0 0 24 24">
+        <polyline points="15 18 9 12 15 6" fill="none" stroke="currentColor" stroke-width="2"/>
+    </symbol>
+    <symbol id="i-chevron-right" viewBox="0 0 24 24">
+        <polyline points="9 18 15 12 9 6" fill="none" stroke="currentColor" stroke-width="2"/>
+    </symbol>
     <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
     <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
@@ -1542,6 +1697,58 @@
             </div>
         </div>
         <div class="channels-list" id="teamChannelsList"></div>
+        <div class="tab-content" id="tab-calendar">
+            <!-- Фильтры -->
+            <div class="calendar-filters">
+                <select id="calendarMemberFilter" class="filter-select" onchange="renderCalendar()">
+                    <option value="all">Все участники</option>
+                    <option value="Hongjoong">Хонджун</option>
+                    <option value="Seonghwa">Сонхва</option>
+                    <option value="Yunho">Юнхо</option>
+                    <option value="Yeosang">Ёсан</option>
+                    <option value="San">Сан</option>
+                    <option value="Mingi">Минги</option>
+                    <option value="Wooyoung">Уён</option>
+                    <option value="Jongho">Чонхо</option>
+                </select>
+                
+                <select id="calendarCategoryFilter" class="filter-select" onchange="renderCalendar()">
+                    <option value="all">Все категории</option>
+                    <option value="MV">MV</option>
+                    <option value="logbook">Logbook</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Interview">Interview</option>
+                    <option value="WANTEEZ">WANTEEZ</option>
+                </select>
+            </div>
+            
+            <!-- Заголовок календаря -->
+            <div class="calendar-header">
+                <button class="calendar-nav" onclick="changeMonth(-1)">
+                    <svg class="icon"><use href="#i-chevron-left"/></svg>
+                </button>
+                <div class="calendar-title" id="calendarTitle">Июль 2026</div>
+                <button class="calendar-nav" onclick="changeMonth(1)">
+                    <svg class="icon"><use href="#i-chevron-right"/></svg>
+                </button>
+            </div>
+            
+            <!-- Сетка календаря -->
+            <div class="calendar-grid" id="calendarGrid"></div>
+            
+            <!-- Модальное окно дня -->
+            <div class="modal-overlay" id="dayModal">
+                <div class="modal-content calendar-day-modal">
+                    <div class="modal-header">
+                        <div class="modal-title" id="dayModalTitle">1 июля 2026</div>
+                        <button class="modal-close" onclick="closeDayModal()">
+                            <svg class="icon"><use href="#i-x"/></svg>
+                        </button>
+                    </div>
+                    <div id="dayModalContent" class="day-modal-content"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1553,6 +1760,11 @@
     <div class="nav-item" onclick="switchTab('new-videos', this)"><div class="nav-icon-wrap"><svg class="nav-icon"><use href="#i-compass"/></svg></div><span class="nav-label">Сети</span></div>
     <div class="nav-item" onclick="switchTab('playlists', this)"><div class="nav-icon-wrap"><svg class="nav-icon"><use href="#i-anchor"/></svg></div><span class="nav-label">Сокровища</span></div>
     <div class="nav-item" onclick="switchTab('translations', this)"><div class="nav-icon-wrap"><svg class="nav-icon"><use href="#i-users"/></svg></div><span class="nav-label">Команда</span></div>
+
+    <button class="nav-item" onclick="switchTab('calendar', this)">
+        <svg class="icon"><use href="#i-calendar"/></svg>
+        <span>Календарь</span>
+    </button>
 </nav>
 
 </div>
@@ -1733,6 +1945,208 @@ async function loadData() {
     }
     
     grid.innerHTML = html;
+}
+
+// Глобальные переменные календаря
+let eventsData = [];
+let currentCalendarDate = new Date();
+let currentCalendarYear = currentCalendarDate.getFullYear();
+let currentCalendarMonth = currentCalendarDate.getMonth();
+
+// Загрузка событий
+async function loadEvents() {
+    try {
+        eventsData = await apiRequest('events', 'GET') || [];
+        console.log('✅ Events loaded:', eventsData.length);
+    } catch (e) {
+        console.error('❌ Error loading events:', e);
+        eventsData = [];
+    }
+}
+
+// Изменение месяца
+function changeMonth(delta) {
+    currentCalendarMonth += delta;
+    if (currentCalendarMonth > 11) {
+        currentCalendarMonth = 0;
+        currentCalendarYear++;
+    } else if (currentCalendarMonth < 0) {
+        currentCalendarMonth = 11;
+        currentCalendarYear--;
+    }
+    renderCalendar();
+}
+
+// Рендер календаря
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const title = document.getElementById('calendarTitle');
+    
+    if (!grid) return;
+    
+    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 
+                       'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    const dayNames = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    
+    title.textContent = `${monthNames[currentCalendarMonth]} ${currentCalendarYear}`;
+    
+    // Получаем фильтры
+    const memberFilter = document.getElementById('calendarMemberFilter').value;
+    const categoryFilter = document.getElementById('calendarCategoryFilter').value;
+    
+    // Заголовки дней недели
+    let html = dayNames.map(day => 
+        `<div class="calendar-day-header">${day}</div>`
+    ).join('');
+    
+    // Первый день месяца
+    const firstDay = new Date(currentCalendarYear, currentCalendarMonth, 1);
+    const lastDay = new Date(currentCalendarYear, currentCalendarMonth + 1, 0);
+    const startingDay = firstDay.getDay();
+    
+    // Пустые ячейки до первого дня
+    for (let i = 0; i < startingDay; i++) {
+        html += `<div></div>`;
+    }
+    
+    // Дни месяца
+    const today = new Date();
+    for (let day = 1; day <= lastDay.getDate(); day++) {
+        const dateStr = `${String(day).padStart(2,'0')}.${String(currentCalendarMonth + 1).padStart(2,'0')}.${currentCalendarYear}`;
+        
+        // Считаем события за день
+        const dayVideos = getVideosForDate(dateStr, memberFilter, categoryFilter);
+        const dayEvents = getEventsForDate(dateStr, memberFilter);
+        const totalCount = dayVideos.length + dayEvents.length;
+        
+        const isToday = today.getDate() === day && 
+                       today.getMonth() === currentCalendarMonth && 
+                       today.getFullYear() === currentCalendarYear;
+        
+        let dayClass = 'calendar-day';
+        if (isToday) dayClass += ' today';
+        if (totalCount > 0) dayClass += ' has-events';
+        
+        html += `
+            <div class="${dayClass}" onclick="openDayModal('${dateStr}')">
+                <div class="calendar-day-number">${day}</div>
+                ${totalCount > 0 ? `<div class="calendar-day-count">${totalCount}</div>` : ''}
+            </div>
+        `;
+    }
+    
+    grid.innerHTML = html;
+}
+
+// Получение видео за дату
+function getVideosForDate(dateStr, memberFilter, categoryFilter) {
+    return videos.filter(video => {
+        if (video.date !== dateStr) return false;
+        if (memberFilter !== 'all' && (!video.members || !video.members.includes(memberFilter))) return false;
+        if (categoryFilter !== 'all' && video.category !== categoryFilter) return false;
+        return true;
+    });
+}
+
+// Получение событий за дату
+function getEventsForDate(dateStr, memberFilter) {
+    return eventsData.filter(event => {
+        if (event.date !== dateStr) return false;
+        if (memberFilter !== 'all' && (!event.members || !event.members.includes(memberFilter))) return false;
+        return true;
+    });
+}
+
+// Открытие модального окна дня
+function openDayModal(dateStr) {
+    const modal = document.getElementById('dayModal');
+    const title = document.getElementById('dayModalTitle');
+    const content = document.getElementById('dayModalContent');
+    
+    if (!modal || !title || !content) return;
+    
+    const [day, month, year] = dateStr.split('.');
+    const monthNames = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
+                       'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    
+    title.textContent = `${day} ${monthNames[parseInt(month) - 1]} ${year}`;
+    
+    const memberFilter = document.getElementById('calendarMemberFilter').value;
+    const categoryFilter = document.getElementById('calendarCategoryFilter').value;
+    
+    const dayVideos = getVideosForDate(dateStr, memberFilter, categoryFilter);
+    const dayEvents = getEventsForDate(dateStr, memberFilter);
+    
+    let html = '';
+    
+    // События
+    if (dayEvents.length > 0) {
+        html += '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">📅 СОБЫТИЯ</div>';
+        dayEvents.forEach(event => {
+            html += `
+                <div class="day-event">
+                    <div class="day-event-title">${event.title || 'Событие'}</div>
+                    <div class="day-event-meta">${event.description || ''}</div>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    // Видео
+    if (dayVideos.length > 0) {
+        html += '<div><div style="font-size:12px;color:var(--text-dim);margin-bottom:8px;">🎥 ВИДЕО</div>';
+        dayVideos.forEach(video => {
+            html += `
+                <div class="day-event" onclick="openEditModal('${video.id}')">
+                    <div class="day-event-title">${video.title || 'Без названия'}</div>
+                    <div class="day-event-meta">${video.category || ''} • ${video.members ? video.members.join(', ') : ''}</div>
+                </div>
+            `;
+        });
+        html += '</div>';
+    }
+    
+    if (dayVideos.length === 0 && dayEvents.length === 0) {
+        html = '<div style="text-align:center;color:var(--text-dim);padding:40px;">Нет событий за этот день</div>';
+    }
+    
+    content.innerHTML = html;
+    modal.classList.add('visible');
+    
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
+// Закрытие модального окна дня
+function closeDayModal() {
+    const modal = document.getElementById('dayModal');
+    if (modal) modal.classList.remove('visible');
+}
+
+// Обновление switchTab
+function switchTab(tabName, el) {
+    currentTab = tabName;
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    const tabElement = document.getElementById(`tab-${tabName}`);
+    if (tabElement) tabElement.classList.add('active');
+    
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    if (el) el.classList.add('active');
+    
+    const searchContainer = document.getElementById('searchContainer');
+    if (tabName === 'translations' || tabName === 'playlists' || tabName === 'calendar') {
+        if (searchContainer) searchContainer.style.display = 'none';
+    } else {
+        if (searchContainer) searchContainer.style.display = 'flex';
+    }
+    
+    if (tabName === 'map') renderVideos();
+    if (tabName === 'new-videos') renderPendingVideos();
+    if (tabName === 'playlists') renderPlaylists();
+    if (tabName === 'calendar') renderCalendar();
+    if (tabName === 'translations') renderTeamChannels();
+    
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 }
 
 // Открытие модального окна дня
