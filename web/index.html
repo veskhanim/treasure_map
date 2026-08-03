@@ -1688,56 +1688,128 @@ let pendingVideos = [];
 
 async function loadData() {
     try {
-        console.log("🔄 Начинаем загрузку данных...");
-        
-        const [videosData, channelsData, playlistsData, categoriesData, pendingData] = await Promise.all([
+        const [videosData, pendingData, categoriesData, channelsData] = await Promise.all([
             apiRequest('videos', 'GET'),
-            apiRequest('channels', 'GET'),
-            apiRequest('playlists', 'GET'),
+            apiRequest('pending-videos', 'GET'),
             apiRequest('categories', 'GET'),
-            apiRequest('pending-videos', 'GET')
+            apiRequest('channels', 'GET')
         ]);
         
-        console.log("📦 Сырые данные получены:", { videosData, channelsData, playlistsData });
-
-        // 1. Безопасная обработка видео (превращаем строку members в массив)
-        videos = (videosData || []).map(video => {
-            let members = video.members;
-            if (typeof members === 'string') {
-                members = members.split(',').map(m => m.trim()).filter(m => m);
-            } else if (!Array.isArray(members)) {
-                members = [];
-            }
-            return { ...video, members };
-        });
-        
+        videos = videosData || [];
+        pendingVideos = pendingData || [];
+        categories = categoriesData || [];
         channels = channelsData || [];
         
-        // 2. Безопасная обработка плейлистов (превращаем строку video_ids в массив)
-        playlists = (playlistsData || []).map(playlist => {
-            let videoIds = playlist.video_ids;
-            if (typeof videoIds === 'string') {
-                videoIds = videoIds.split(',').map(v => v.trim()).filter(v => v);
-            } else if (!Array.isArray(videoIds)) {
-                videoIds = [];
-            }
-            return { ...playlist, video_ids: videoIds };
-        });
+        // Загружаем события
+        await loadEvents();
         
-        categories = categoriesData || [];
-        pendingVideos = pendingData || [];
+        console.log('✅ Данные успешно обработаны. Рендерим...');
         
-        console.log("✅ Данные успешно обработаны. Рендерим...");
-        
-        renderVideos(getFilteredVideos());
-        renderPlaylists();
-        renderTeamChannels();
-        renderPendingVideos();
-        updateCategoryDropdown();
+        if (currentTab === 'map') {
+            renderVideos();
+        } else if (currentTab === 'new-videos') {
+            renderPendingVideos();
+        } else if (currentTab === 'calendar') {
+            renderCalendar();
+        }
         
     } catch (error) {
-        console.error("❌ Критическая ошибка загрузки данных:", error);
+        console.error('❌ Критическая ошибка загрузки данных:', error);
     }
+}
+
+    today.getFullYear() === currentCalendarYear;
+        
+        let dayClass = 'calendar-day';
+        if (isToday) dayClass += ' today';
+        if (totalCount > 0) dayClass += ' has-events';
+        
+        html += 
+            <div class="${dayClass}" onclick="openDayModal('${dateStr}')">
+                <div class="calendar-day-number">${day}</div>
+                ${totalCount > 0 ? <div class="calendar-day-count">${totalCount}</div> : ''}
+            </div>
+        ;
+    }
+    
+    grid.innerHTML = html;
+}
+
+// Открытие модального окна дня
+function openDayModal(dateStr) {
+    const modal = document.getElementById('dayModal');
+    const title = document.getElementById('dayModalTitle');
+    const content = document.getElementById('dayModalContent');
+    
+    if (!modal  !title  !content) return;
+    
+    const [day, month, year] = dateStr.split('.');
+    const monthNames = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 
+                       'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    
+    title.textContent = ${day} ${monthNames[parseInt(month) - 1]} ${year};
+    
+    const memberFilter = document.getElementById('calendarMemberFilter').value;
+    const categoryFilter = document.getElementById('calendarCategoryFilter').value;
+    
+    const dayVideos = getVideosForDate(dateStr, memberFilter, categoryFilter);
+    const dayEvents = getEventsForDate(dateStr, memberFilter);
+    
+    let html = '';
+    
+    // События с привязанными видео
+    if (dayEvents.length > 0) {
+        html += '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--orange);margin-bottom:8px;font-weight:700;">📅 СОБЫТИЯ</div>';
+        dayEvents.forEach(event => {
+            const eventVideos = getVideosFromEvent(event);
+            html += 
+                <div class="day-event">
+                    <div class="day-event-title">${event.title || 'Событие'}</div>
+                    ${event.description ? <div style="font-size:12px;color:var(--text-dim);margin:4px 0;">${event.description}</div> : ''}
+                    ${eventVideos.length > 0 ? 
+                        <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1);">
+                            <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;"> Видео (${eventVideos.length}):</div>
+                            ${eventVideos.map(v => 
+                                <div style="font-size:12px;color:var(--white);padding:4px 0;cursor:pointer;" onclick="openEditModal('${v.id}')">
+                                    • ${v.title || 'Без названия'}
+                                </div>
+                            ).join('')}
+                        </div>
+                     : ''}
+                </div>
+            ;
+        });
+        html += '</div>';
+    }
+    
+    // Отдельные видео (не привязанные к событиям)
+    if (dayVideos.length > 0) {
+        html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;">🎥 ВИДЕО</div>';
+        dayVideos.forEach(video => {
+            html += 
+                <div class="day-event" onclick="openEditModal('${video.id}')">
+                    <div class="day-event-title">${video.title || 'Без названия'}</div>
+                    <div class="day-event-meta">${video.category || ''} • ${video.members ? video.members.join(', ') : ''}</div>
+                </div>
+            ;
+        });
+        html += '</div>';
+    }
+    
+    if (dayVideos.length === 0 && dayEvents.length === 0) {
+        html = '<div style="text-align:center;color:var(--text-dim);padding:40px;">Нет событий за этот день</div>';
+    }
+    
+    content.innerHTML = html;
+    modal.classList.add('visible');
+    
+    if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+}
+
+// Закрытие модального окна дня
+function closeDayModal() {
+    const modal = document.getElementById('dayModal');
+    if (modal) modal.classList.remove('visible');
 }
     
 function togglePlaylistSort() {
