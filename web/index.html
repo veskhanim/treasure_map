@@ -2015,10 +2015,44 @@
        
         
         // Загрузка событий
-        
         async function loadEvents() {
             try {
-                eventsData = await apiRequest('events', 'GET') || [];
+                const result = await apiRequest('events', 'GET');
+                
+                // Нормализация: гарантируем что eventsData — массив
+                if (Array.isArray(result)) {
+                    eventsData = result;
+                } else if (result && Array.isArray(result.logs)) {
+                    eventsData = result.logs;
+                } else {
+                    eventsData = [];
+                }
+                
+                // Нормализуем поля каждого события
+                eventsData = eventsData.map(event => {
+                    // videoIds: если строка — разбиваем в массив
+                    if (typeof event.video_ids === 'string') {
+                        event.videoIds = event.video_ids.split(',').map(id => id.trim()).filter(id => id);
+                    } else if (Array.isArray(event.videoIds)) {
+                        // уже массив
+                    } else {
+                        event.videoIds = [];
+                    }
+                    
+                    // members: если строка — разбиваем в массив
+                    if (typeof event.members === 'string') {
+                        event.members = event.members.split(',').map(m => m.trim()).filter(m => m);
+                    } else if (!Array.isArray(event.members)) {
+                        event.members = [];
+                    }
+                    
+                    // Флаги для особых событий
+                    event.isAnniversary = event.type === 'anniversary';
+                    event.isAtinyDay = event.type === 'atiny_day';
+                    
+                    return event;
+                });
+                
                 console.log('✅ Events loaded:', eventsData.length);
             } catch (e) {
                 console.error('❌ Error loading events:', e);
@@ -2106,6 +2140,14 @@
                 return true;
             });
         }
+        function getVideosFromEvent(event) {
+            const videoIds = Array.isArray(event.videoIds) 
+                ? event.videoIds 
+                : (typeof event.video_ids === 'string' 
+                    ? event.video_ids.split(',').map(id => id.trim()).filter(id => id) 
+                    : []);
+            return videos.filter(v => videoIds.includes(v.id));
+        }
 
         function getEventsForDate(dateStr, memberFilter) {
             return eventsData.filter(event => {
@@ -2115,9 +2157,21 @@
             });
         }
 
-        function getVideosFromEvent(event) {
-            const videoIds = event.videoIds || [];
-            return videos.filter(v => videoIds.includes(v.id));
+        function getEventsForDate(dateStr, memberFilter) {
+            // Защита: если eventsData не массив — возвращаем пустой массив
+            if (!Array.isArray(eventsData)) {
+                console.warn('⚠️ eventsData is not an array:', eventsData);
+                return [];
+            }
+            
+            return eventsData.filter(event => {
+                if (event.date !== dateStr) return false;
+                if (memberFilter !== 'all') {
+                    const members = Array.isArray(event.members) ? event.members : [];
+                    if (!members.includes(memberFilter)) return false;
+                }
+                return true;
+            });
         }
 
         function openDayModal(dateStr) {
