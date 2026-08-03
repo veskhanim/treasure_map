@@ -2383,53 +2383,40 @@ function renderVideos() {
     const container = document.getElementById('videosList');
     if (!container) return;
     
-    // Используем глобальные переменные фильтров (они не сбрасываются)
-    let filteredVideos = [...videos];
-    
-    // Применяем фильтры
-    if (currentSearch) {
-        filteredVideos = filteredVideos.filter(v => 
-            v.title && v.title.toLowerCase().includes(currentSearch.toLowerCase())
-        );
-    }
-    
-    if (currentCategory) {
-        filteredVideos = filteredVideos.filter(v => v.category === currentCategory);
-    }
-    
-    if (currentChannel) {
-        filteredVideos = filteredVideos.filter(v => v.channel_id === currentChannel);
-    }
+    let filteredVideos = getFilteredVideos();
     
     // Сортировка
+    const parseDate = (dateStr) => {
+        if (!dateStr) return new Date(0);
+        if (dateStr instanceof Date) return dateStr;
+        const str = String(dateStr).trim();
+        if (str.match(/^\d{2}[./]\d{2}[./]\d{4}$/)) {
+            const [day, month, year] = str.split(/[./]/);
+            return new Date(year, month - 1, day);
+        }
+        if (str.match(/^\d{4}-\d{2}-\d{2}/)) return new Date(str);
+        const parsed = new Date(str);
+        return isNaN(parsed.getTime()) ? new Date(0) : parsed;
+    };
+    
     filteredVideos.sort((a, b) => {
         const dateA = parseDate(a.date);
         const dateB = parseDate(b.date);
         return sortAscending ? dateA - dateB : dateB - dateA;
     });
     
-    // Пагинация
-    const videosToShow = filteredVideos.slice(0, displayLimit);
-    
-    container.innerHTML = videosToShow.map(video => `
+    container.innerHTML = filteredVideos.map(video => `
         <div class="video-card">
             ${renderVideoCard(video)}
         </div>
     `).join('');
     
-    // Обновляем счётчик
-    document.getElementById('resultsCount').textContent = `Найдено: ${filteredVideos.length}`;
+    const countEl = document.getElementById('resultsCount');
+    if (countEl) countEl.textContent = `Найдено: ${filteredVideos.length}`;
     
-    // Кнопка "Показать ещё"
-    const remaining = filteredVideos.length - displayLimit;
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
-    if (loadMoreBtn) {
-        if (remaining > 0) {
-            loadMoreBtn.style.display = 'block';
-            document.getElementById('remainingCount').textContent = remaining;
-        } else {
-            loadMoreBtn.style.display = 'none';
-        }
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) {
+        emptyState.classList.toggle('visible', filteredVideos.length === 0);
     }
 }
 
