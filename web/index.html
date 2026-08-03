@@ -1985,7 +1985,9 @@
         async function loadEvents() {
             try {
                 eventsData = await apiRequest('events', 'GET') || [];
+                console.log('✅ Events loaded:', eventsData.length);
             } catch (e) {
+                console.error('❌ Error loading events:', e);
                 eventsData = [];
             }
         }
@@ -2167,7 +2169,13 @@
                     html += `
                         <div class="day-event" onclick="openEditModal('${video.id}')">
                             <div class="day-event-title">${video.title || 'Без названия'}</div>
-                            <div class="day-event-meta">${video.category || ''} • ${video.members ? video.members.join(', ') : ''}</div>
+                            <div class="day-event-meta">${video.category || ''} • ${(() => {
+                                if (!video.members) return '';
+                                const members = typeof video.members === 'string' 
+                                    ? video.members.split(',').map(m => m.trim()).filter(m => m)
+                                    : video.members;
+                                return Array.isArray(members) ? members.join(', ') : String(members);
+                            })()}</div>
                         </div>
                     `;
                 });
