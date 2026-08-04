@@ -1306,27 +1306,16 @@
         }
         .modal-btn.delete:active { transform: scale(0.95); }
         /* Календарь */
-        .calendar-filters {
+        #tab-calendar {
             display: flex;
-            gap: 6px;
-            padding: 8px;
-            flex-wrap: wrap;
-        }
-        .filter-select {
-            flex: 1;
-            min-width: 100px;
-            padding: 6px 8px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 6px;
-            color: var(--white);
-            font-size: 12px;
-            outline: none;
+            flex-direction: column;
+            height: 100%;
         }
         .calendar-selector {
             display: flex;
             gap: 6px;
             padding: 8px;
+            flex-shrink: 0;
         }
         .calendar-selector select {
             flex: 1;
@@ -1339,11 +1328,30 @@
             font-weight: 600;
             outline: none;
         }
+        .calendar-filters {
+            display: flex;
+            gap: 6px;
+            padding: 0 8px 8px;
+            flex-shrink: 0;
+        }
+        .filter-select {
+            flex: 1;
+            padding: 6px 8px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: var(--white);
+            font-size: 12px;
+            outline: none;
+        }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
+            grid-template-rows: auto repeat(6, 1fr);
             gap: 2px;
             padding: 4px 8px;
+            flex: 1;
+            min-height: 0;
         }
         .calendar-day-header {
             text-align: center;
@@ -1351,22 +1359,22 @@
             font-weight: 700;
             color: var(--text-dim);
             padding: 4px 0;
+            flex-shrink: 0;
         }
         .calendar-day-header.weekend {
             color: var(--orange);
         }
         .calendar-day {
-            aspect-ratio: 1;
             background: rgba(255,255,255,0.05);
             border-radius: 4px;
             padding: 2px;
             cursor: pointer;
             position: relative;
             transition: all 0.2s;
-            min-height: 36px;
+            min-height: 0;
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
+            overflow: hidden;
         }
         .calendar-day:hover { background: rgba(255,255,255,0.1); }
         .calendar-day.active {
@@ -1393,42 +1401,42 @@
             font-weight: 700;
             color: var(--white);
             line-height: 1;
+            flex-shrink: 0;
         }
         .calendar-day-count {
             font-size: 8px;
             color: var(--text-dim);
-            margin-top: 1px;
+            flex-shrink: 0;
+        }
+        .calendar-day-preview {
+            flex: 1;
+            min-height: 0;
+            margin-top: 2px;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+        .calendar-day-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .calendar-day-preview-count {
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            font-size: 8px;
+            font-weight: 700;
+            padding: 1px 3px;
+            border-radius: 2px;
         }
         .calendar-day-event-icon {
             font-size: 8px;
             position: absolute;
-            bottom: 2px;
+            top: 2px;
             right: 2px;
-        }
-        .calendar-day-modal {
-            max-width: 90vw;
-            max-height: 80vh;
-            overflow-y: auto;
-        }
-        .day-modal-content { padding: 12px 0; }
-        .day-event {
-            background: rgba(255,255,255,0.05);
-            border-radius: 6px;
-            padding: 10px;
-            margin-bottom: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .day-event:hover { background: rgba(255,255,255,0.1); }
-        .day-event-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--white);
-            margin-bottom: 3px;
-        }
-        .day-event-meta {
-            font-size: 11px;
-            color: var(--text-dim);
         }
         @media (max-width: 360px) {
             .video-thumbnail { width: 120px; min-width: 120px; height: 68px; }
@@ -2065,37 +2073,28 @@
             const grid = document.getElementById('calendarGrid');
             if (!grid) return;
             
-            // Обновляем селекторы
             initCalendarSelectors();
             
             const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
             
-            // Заголовки дней недели
             let html = dayNames.map((day, idx) => 
                 `<div class="calendar-day-header ${idx >= 5 ? 'weekend' : ''}">${day}</div>`
             ).join('');
             
-            // Первый день месяца
             const firstDay = new Date(currentCalendarYear, currentCalendarMonth, 1);
             const lastDay = new Date(currentCalendarYear, currentCalendarMonth + 1, 0);
             
-            // Смещение для понедельника (0=вс, 1=пн ... 6=сб)
-            // Превращаем: вс=6, пн=0, вт=1, ... сб=5
             let startingDay = firstDay.getDay() - 1;
             if (startingDay < 0) startingDay = 6;
             
-            // Пустые ячейки до первого дня
             for (let i = 0; i < startingDay; i++) {
                 html += `<div></div>`;
             }
             
-            // Фильтры
             const memberFilter = document.getElementById('calendarMemberFilter').value;
             const categoryFilter = document.getElementById('calendarCategoryFilter').value;
-            
             const today = new Date();
             
-            // Дни месяца
             for (let day = 1; day <= lastDay.getDate(); day++) {
                 const dateStr = `${String(day).padStart(2,'0')}.${String(currentCalendarMonth + 1).padStart(2,'0')}.${currentCalendarYear}`;
                 
@@ -2107,11 +2106,10 @@
                                today.getMonth() === currentCalendarMonth && 
                                today.getFullYear() === currentCalendarYear;
                 
-                // Проверяем особые даты
                 let specialClass = '';
                 let eventIcon = '';
                 dayEvents.forEach(ev => {
-                    if (ev.isAnniversary) { specialClass = 'anniversary'; eventIcon = ''; }
+                    if (ev.isAnniversary) { specialClass = 'anniversary'; eventIcon = '🎉'; }
                     if (ev.isAtinyDay) { specialClass = 'atiny-day'; eventIcon = '💜'; }
                 });
                 
@@ -2120,11 +2118,23 @@
                 if (specialClass) dayClass += ' ' + specialClass;
                 else if (totalCount > 0) dayClass += ' has-events';
                 
+                // Превью первого видео
+                let previewHtml = '';
+                if (dayVideos.length > 0) {
+                    const firstVideo = dayVideos[0];
+                    previewHtml = `
+                        <div class="calendar-day-preview">
+                            <img src="https://img.youtube.com/vi/${firstVideo.id}/default.jpg" alt="" loading="lazy">
+                            ${dayVideos.length > 1 ? `<div class="calendar-day-preview-count">+${dayVideos.length - 1}</div>` : ''}
+                        </div>
+                    `;
+                }
+                
                 html += `
                     <div class="${dayClass}" onclick="openDayModal('${dateStr}')">
                         <div class="calendar-day-number">${day}</div>
-                        ${totalCount > 0 ? `<div class="calendar-day-count">${totalCount}</div>` : ''}
                         ${eventIcon ? `<div class="calendar-day-event-icon">${eventIcon}</div>` : ''}
+                        ${previewHtml}
                     </div>
                 `;
             }
@@ -2193,34 +2203,74 @@
             
             let html = '';
             
-            // События
-            if (dayEvents.length > 0) {
-                html += '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--orange);margin-bottom:8px;font-weight:700;">📅 СОБЫТИЯ</div>';
-                dayEvents.forEach(event => {
+            // Особые события (годовщины)
+            const specialEvents = dayEvents.filter(e => e.isAnniversary || e.isAtinyDay);
+            const regularEvents = dayEvents.filter(e => !e.isAnniversary && !e.isAtinyDay);
+            
+            if (specialEvents.length > 0) {
+                html += '<div style="margin-bottom:16px;">';
+                specialEvents.forEach(event => {
+                    const bgColor = event.isAnniversary ? 'rgba(255,215,0,0.2)' : 'rgba(138,43,226,0.2)';
+                    const borderColor = event.isAnniversary ? 'gold' : '#8a2be2';
                     html += `
-                        <div class="day-event">
-                            <div class="day-event-title">${event.title || 'Событие'}</div>
-                            <div class="day-event-meta">${event.description || ''}</div>
+                        <div class="day-event" style="background:${bgColor};border:1px solid ${borderColor};">
+                            <div class="day-event-title">${event.title}</div>
+                            <div class="day-event-meta">${event.description}</div>
                         </div>
                     `;
                 });
                 html += '</div>';
             }
             
-            // Видео
-            if (dayVideos.length > 0) {
-                html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;"> ВИДЕО</div>';
-                dayVideos.forEach(video => {
+            // Обычные события
+            if (regularEvents.length > 0) {
+                html += '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--orange);margin-bottom:8px;font-weight:700;">📅 СОБЫТИЯ</div>';
+                regularEvents.forEach(event => {
                     html += `
-                        <div class="day-event" onclick="openEditModal('${video.id}')">
-                            <div class="day-event-title">${video.title || 'Без названия'}</div>
-                            <div class="day-event-meta">${video.category || ''} • ${(() => {
-                                if (!video.members) return '';
-                                const members = typeof video.members === 'string' 
-                                    ? video.members.split(',').map(m => m.trim()).filter(m => m)
-                                    : video.members;
-                                return Array.isArray(members) ? members.join(', ') : String(members);
-                            })()}</div>
+                        <div class="day-event">
+                            <div class="day-event-title">${event.title || 'Событие'}</div>
+                            ${event.description ? `<div style="font-size:12px;color:var(--text-dim);margin:4px 0;">${event.description}</div>` : ''}
+                        </div>
+                    `;
+                });
+                html += '</div>';
+            }
+            
+            // Видео — используем renderVideoCard как на вкладке Карта
+            if (dayVideos.length > 0) {
+                html += '<div><div style="font-size:12px;color:var(--sand);margin-bottom:8px;font-weight:700;">🎥 ВИДЕО (' + dayVideos.length + ')</div>';
+                dayVideos.forEach(video => {
+                    // Нормализуем members
+                    let members = video.members || [];
+                    if (typeof members === 'string') {
+                        members = members.split(',').map(m => m.trim()).filter(m => m);
+                    }
+                    // Если все 8 — показываем от8
+                    const membersDisplay = members.length === 8 ? ['от8'] : members;
+                    
+                    html += `
+                        <div class="video-card" style="margin-bottom:8px;">
+                            <div class="video-left">
+                                <div class="video-thumbnail">
+                                    <img src="https://img.youtube.com/vi/${video.id}/hqdefault.jpg" alt="">
+                                    <div class="video-duration">${video.duration || '0:00'}</div>
+                                </div>
+                            </div>
+                            <div class="video-info">
+                                <div>
+                                    <div class="video-title">${video.title || 'Без названия'}</div>
+                                    <div class="video-meta">
+                                        ${membersDisplay.map(m => `<span class="member-tag ${m === 'от8' ? 'all-members' : ''}">${m}</span>`).join('')}
+                                        <span class="meta-dot"></span>
+                                        <span>${video.category || ''}</span>
+                                    </div>
+                                </div>
+                                <div class="video-actions">
+                                    ${video.kr_url ? `<a class="video-link kr" href="${video.kr_url}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>KR</a>` : ''}
+                                    ${video.en_url && !video.kr_url ? `<a class="video-link en" href="${video.en_url}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>EN</a>` : ''}
+                                    ${video.ru_url ? `<a class="video-link ru" href="${video.ru_url}" target="_blank"><svg class="icon icon-sm"><use href="#i-link"/></svg>RU</a>` : '<span class="video-link disabled">RU</span>'}
+                                </div>
+                            </div>
                         </div>
                     `;
                 });
