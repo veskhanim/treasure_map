@@ -1306,16 +1306,28 @@
         }
         .modal-btn.delete:active { transform: scale(0.95); }
         /* Календарь */
-        #tab-calendar {
+       /* Календарь */
+        .calendar-filters {
             display: flex;
-            flex-direction: column;
-            height: 100%;
+            gap: 6px;
+            padding: 8px;
+            flex-wrap: wrap;
+        }
+        .filter-select {
+            flex: 1;
+            min-width: 100px;
+            padding: 6px 8px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: var(--white);
+            font-size: 12px;
+            outline: none;
         }
         .calendar-selector {
             display: flex;
             gap: 6px;
             padding: 8px;
-            flex-shrink: 0;
         }
         .calendar-selector select {
             flex: 1;
@@ -1328,30 +1340,11 @@
             font-weight: 600;
             outline: none;
         }
-        .calendar-filters {
-            display: flex;
-            gap: 6px;
-            padding: 0 8px 8px;
-            flex-shrink: 0;
-        }
-        .filter-select {
-            flex: 1;
-            padding: 6px 8px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 6px;
-            color: var(--white);
-            font-size: 12px;
-            outline: none;
-        }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
-            grid-template-rows: auto repeat(6, 1fr);
             gap: 2px;
             padding: 4px 8px;
-            flex: 1;
-            min-height: 0;
         }
         .calendar-day-header {
             text-align: center;
@@ -1359,7 +1352,6 @@
             font-weight: 700;
             color: var(--text-dim);
             padding: 4px 0;
-            flex-shrink: 0;
         }
         .calendar-day-header.weekend {
             color: var(--orange);
@@ -1371,10 +1363,9 @@
             cursor: pointer;
             position: relative;
             transition: all 0.2s;
-            min-height: 0;
+            min-height: 70px;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
         }
         .calendar-day:hover { background: rgba(255,255,255,0.1); }
         .calendar-day.active {
@@ -1408,35 +1399,56 @@
             color: var(--text-dim);
             flex-shrink: 0;
         }
-        .calendar-day-preview {
-            flex: 1;
-            min-height: 0;
+        .calendar-day-previews {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1px;
             margin-top: 2px;
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
+            flex: 1;
+            align-content: flex-start;
         }
-        .calendar-day-preview img {
+        .calendar-day-preview-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 2px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .calendar-day-preview-thumb img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-        }
-        .calendar-day-preview-count {
-            position: absolute;
-            bottom: 2px;
-            right: 2px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            font-size: 8px;
-            font-weight: 700;
-            padding: 1px 3px;
-            border-radius: 2px;
         }
         .calendar-day-event-icon {
             font-size: 8px;
             position: absolute;
             top: 2px;
             right: 2px;
+        }
+        .calendar-day-modal {
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .day-modal-content { padding: 12px 0; }
+        .day-event {
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .day-event:hover { background: rgba(255,255,255,0.1); }
+        .day-event-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--white);
+            margin-bottom: 3px;
+        }
+        .day-event-meta {
+            font-size: 11px;
+            color: var(--text-dim);
         }
         @media (max-width: 360px) {
             .video-thumbnail { width: 120px; min-width: 120px; height: 68px; }
@@ -2069,7 +2081,7 @@
         }
         
         // Рендер календаря (понедельник первый)
-        function renderCalendar() {
+      function renderCalendar() {
             const grid = document.getElementById('calendarGrid');
             if (!grid) return;
             
@@ -2118,23 +2130,30 @@
                 if (specialClass) dayClass += ' ' + specialClass;
                 else if (totalCount > 0) dayClass += ' has-events';
                 
-                // Превью первого видео
-                let previewHtml = '';
+                // Превью видео (до 6 штук)
+                let previewsHtml = '';
                 if (dayVideos.length > 0) {
-                    const firstVideo = dayVideos[0];
-                    previewHtml = `
-                        <div class="calendar-day-preview">
-                            <img src="https://img.youtube.com/vi/${firstVideo.id}/default.jpg" alt="" loading="lazy">
-                            ${dayVideos.length > 1 ? `<div class="calendar-day-preview-count">+${dayVideos.length - 1}</div>` : ''}
-                        </div>
-                    `;
+                    const maxPreviews = 6;
+                    const previews = dayVideos.slice(0, maxPreviews);
+                    previewsHtml = '<div class="calendar-day-previews">';
+                    previews.forEach(video => {
+                        previewsHtml += `
+                            <div class="calendar-day-preview-thumb">
+                                <img src="https://img.youtube.com/vi/${video.id}/default.jpg" alt="" loading="lazy">
+                            </div>
+                        `;
+                    });
+                    if (dayVideos.length > maxPreviews) {
+                        previewsHtml += `<div style="font-size:8px;color:var(--text-dim);padding:2px;">+${dayVideos.length - maxPreviews}</div>`;
+                    }
+                    previewsHtml += '</div>';
                 }
                 
                 html += `
                     <div class="${dayClass}" onclick="openDayModal('${dateStr}')">
                         <div class="calendar-day-number">${day}</div>
                         ${eventIcon ? `<div class="calendar-day-event-icon">${eventIcon}</div>` : ''}
-                        ${previewHtml}
+                        ${previewsHtml}
                     </div>
                 `;
             }
